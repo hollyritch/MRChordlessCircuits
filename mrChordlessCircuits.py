@@ -1,6 +1,26 @@
 from collections import defaultdict
 import networkx as nx
 from itertools import product
+import time
+import numpy as np
+from matplotlib import pyplot as plt
+
+
+class _NeighborhoodCache(dict):
+    """Very lightweight graph wrapper which caches neighborhoods as list.
+
+    This dict subclass uses the __missing__ functionality to query graphs for
+    their neighborhoods, and store the result as a list.  This is used to avoid
+    the performance penalty incurred by subgraph views.
+    """
+
+    def __init__(self, G):
+        self.G = G
+
+    def __missing__(self, v):
+        Gv = self[v] = set(self.G[v])
+        return Gv
+
 
 def chordless_cycle_search_Species(F, B, path, length_bound, G):
     fwBlocked = defaultdict(int)
@@ -53,8 +73,6 @@ def chordless_cycle_search_Species(F, B, path, length_bound, G):
                             bwBlocked[m] += 1
                     path.append(x)
                     stack.append(iter(Fx))
-                    if x=="M2":
-                        print(x, fwBlocked["R2"])
                     break
         else:                                       # Take off 
             stack.pop() 
@@ -100,8 +118,6 @@ def chordless_cycle_search_Reaction(F, B, path, length_bound, G):
             if target in Fx:                            # Remember: x is a metabolite
                 if sum(1 for y in Fx if y in path)==1 and fwBlocked[target]==0:
                     yield path + [x]                    # yield the path and stop.....you can' go any further, otherwise there would be non MR-chordfree cycles
-                else:
-                    print("Unfortunately....it does not work")
             else:                                   
                 if G.nodes[x]["Type"]=="Species":   # Block forward in the case of a metabolite
                     for y in Fx:
@@ -138,7 +154,7 @@ def chordless_cycle_search(F, B, path, length_bound, G):
 #############################
 
 
-def findAllMRChordlessCycles(F, bound):
+def findAllMRChordlessCyclesList(F, bound):
     B = F.reverse(copy=True)
     def stems(C, v):
         for u, w in product(C.pred[v], C.succ[v]):
@@ -154,6 +170,28 @@ def findAllMRChordlessCycles(F, bound):
             if Fcc is None:
                 Fcc = nx.algorithms.cycles._NeighborhoodCache(Fc)
                 Bcc = nx.algorithms.cycles._NeighborhoodCache(B.subgraph(c))
+            yield from chordless_cycle_search(Fcc, Bcc, S, bound, F)
+        components.extend(c for c in nx.strongly_connected_components(F.subgraph(c - {v})) if len(c) > 3)
+#############################
+#############################
+
+
+def findAllMRChordlessCyclesSet(F, bound):
+    B = F.reverse(copy=True)
+    def stems(C, v):
+        for u, w in product(C.pred[v], C.succ[v]):
+            yield [u, v, w]
+
+    components = [c for c in nx.strongly_connected_components(F) if len(c) > 3]
+    while components:
+        c = components.pop()
+        v = next(iter(c))   
+        Fc = F.subgraph(c)
+        Fcc = Bcc = None
+        for S in stems(Fc, v):
+            if Fcc is None:
+                Fcc = _NeighborhoodCache(Fc)
+                Bcc = _NeighborhoodCache(B.subgraph(c))
             yield from chordless_cycle_search(Fcc, Bcc, S, bound, F)
         components.extend(c for c in nx.strongly_connected_components(F.subgraph(c - {v})) if len(c) > 3)
 #############################
@@ -182,52 +220,87 @@ def findNodeSpecificMRChordlessCycles(F, x, bound):
 #############################
 #############################
 
-G=nx.DiGraph()
 
-G.add_node("M1")
-G.add_node("M2")
-G.add_node("M3")
-G.add_node("M4")
-G.add_node("M5")
+def callFindMRChordlessCircuits(H:nx.DiGraph, type:str):
+    for comp in nx.strongly_connected_components(H):
+        F = H.subgraph(comp)
+        X, Y = nx.algorithms.bipartite.sets(F, top_nodes=None)
+        if len(X)<len(Y):
+            M=X
+            R=Y
+        else:
+            M=Y
+            R=X
+        for m in M:
+            F.nodes[m]["Type"]="Species"
+        for r in R:
+            F.nodes[r]["Type"]="Reaction"
+        for n in F.nodes():
+            if "Type" not in F.nodes[n]:
+                print(n, n in X, n in R, F.nodes[n])
+                input()
+        if type == "List":
+            for c in findAllMRChordlessCyclesList(F, None):
+                continue
+        if type == "Set":
+            for c in findAllMRChordlessCyclesSet(F, None):
+                continue
+#############################
+#############################
 
-G.add_node("R1")
-G.add_node("R2")
-G.add_node("R3")
-G.add_node("R4")
-G.add_node("R5")
+def plotResults(n, p, keys, timeDict):
+    x = np.arange(len(keys))  # the label locations
+    width = 0.25  # the width of the bars
+    multiplier = 0
 
-G.nodes["M1"]["Type"] = "Species"
-G.nodes["R1"]["Type"] = "Reaction"
-G.nodes["M2"]["Type"] = "Species"
-G.nodes["R2"]["Type"] = "Reaction"
-G.nodes["M3"]["Type"] = "Species"
-G.nodes["R3"]["Type"] = "Reaction"
-G.nodes["M4"]["Type"] = "Species"
-G.nodes["R4"]["Type"] = "Reaction"
-G.nodes["M5"]["Type"] = "Species"
-G.nodes["R5"]["Type"] = "Reaction"
-
-G.add_edge("M1", "R1")
-G.add_edge("R1", "M3")
-
-G.add_edge("M2", "R1")
-G.add_edge("M2", "R2")
-G.add_edge("R2", "M5")
-
-G.add_edge("M3", "R3")
-G.add_edge("R3", "M2")
-
-G.add_edge("M4", "R4")
-G.add_edge("R4", "M1")
-
-G.add_edge("M5", "R5")
-G.add_edge("R5", "M4")
+    fig, ax = plt.subplots(layout='constrained')
+    fig.set_figheight(10)
+    fig.set_figwidth(20)
+    barLabels = ["tab:pink", "bar:blue"]
+    for attribute, measurement in timeDict.items():
+        offset = width * multiplier
+        rects = ax.bar(x+0.1 + offset, measurement, width, label=attribute)
+        multiplier += 1
+    n = 28
+    ax.set_ylabel(ylabel="Time", fontsize=n)
+    ax.set_yscale("log")
+    ax.set_xlabel(xlabel="Number of nodes", fontsize=n)
+    ax.set_xticks(x + width, keys, fontsize=n)
+    ax.legend(loc='upper left', ncols=3, fontsize=n)
+    plt.yticks(fontsize=n)
+    plt.savefig("./Benchmarking/MRChordlessVsJohnson_"+str(n)+"_"+str(p)+".png")
 
 
-for c in findAllMRChordlessCycles(G, None):
-    print(c)
-
-
-print("Now all cycles")
-for c in nx.simple_cycles(G):
-    print(c)
+for k in range(1, 11):
+    p = k/100
+    timeDict = {}
+    keys = []
+    for n in range(10, 100, 10):
+        print(n)
+        keys = []
+        H=nx.algorithms.bipartite.random_graph(n=n, m=n, p=p, directed=True)
+        
+        timeStamp = time.time()
+        callFindMRChordlessCircuits(H, "Set")
+        setTime = time.time()-timeStamp
+        
+        timeStamp = time.time()
+        callFindMRChordlessCircuits(H, "List")
+        listTime = time.time()-timeStamp
+        
+        timeStamp = time.time()
+        for c in nx.simple_cycles(H):
+            continue
+        johnsonTime = time.time()-timeStamp
+        
+        if n==10:
+            timeDict["MR-chordlessSet"]=[setTime]
+            timeDict["MR-chordlessList"]=[listTime]
+            timeDict["Johnson"]=[johnsonTime]
+        else:
+            timeDict["MR-chordlessSet"].append(setTime)
+            timeDict["MR-chordlessList"].append(listTime)
+            timeDict["Johnson"].append(johnsonTime)
+        keys.append(n)
+    print(timeDict)
+    plotResults(2*n, p, keys, timeDict)
