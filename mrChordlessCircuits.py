@@ -4,7 +4,7 @@ from itertools import product
 import time
 import numpy as np
 from matplotlib import pyplot as plt
-
+from tqdm import tqdm
 
 class _NeighborhoodCache(dict):
     """Very lightweight graph wrapper which caches neighborhoods as list.
@@ -221,7 +221,7 @@ def findNodeSpecificMRChordlessCycles(F, x, bound):
 #############################
 
 
-def callFindMRChordlessCircuits(H:nx.DiGraph, type:str):
+def callFindMRChordlessCircuits(H:nx.DiGraph, type:str, bound:int):
     for comp in nx.strongly_connected_components(H):
         F = H.subgraph(comp)
         X, Y = nx.algorithms.bipartite.sets(F, top_nodes=None)
@@ -240,23 +240,39 @@ def callFindMRChordlessCircuits(H:nx.DiGraph, type:str):
                 print(n, n in X, n in R, F.nodes[n])
                 input()
         if type == "List":
-            for c in findAllMRChordlessCyclesList(F, None):
+            for c in findAllMRChordlessCyclesList(F, bound):
                 continue
         if type == "Set":
-            for c in findAllMRChordlessCyclesSet(F, None):
+            for c in findAllMRChordlessCyclesSet(F, bound):
                 continue
 #############################
 #############################
 
-def plotResults(n, p, keys, timeDict):
+
+def checkCycle(c, H):
+    chordFree = True
+    for v in c:
+        if H.nodes[v]["Type"]=="Reaction":            
+            if sum(1 for u in c if (u,v) in H.edges())>1:
+                chordFree=False
+                break
+        if H.nodes[v]["Type"]=="Species":            
+            if sum(1 for u in c if (v,u) in H.edges())>1:
+                chordFree=False
+                break
+    return chordFree
+#############################
+#############################
+
+
+def plotResults(m, p, keys, timeDict):
     x = np.arange(len(keys))  # the label locations
-    width = 0.25  # the width of the bars
+    width = 0.1  # the width of the bars
     multiplier = 0
 
     fig, ax = plt.subplots(layout='constrained')
     fig.set_figheight(10)
     fig.set_figwidth(20)
-    barLabels = ["tab:pink", "bar:blue"]
     for attribute, measurement in timeDict.items():
         offset = width * multiplier
         rects = ax.bar(x+0.1 + offset, measurement, width, label=attribute)
@@ -268,32 +284,41 @@ def plotResults(n, p, keys, timeDict):
     ax.set_xticks(x + width, keys, fontsize=n)
     ax.legend(loc='upper left', ncols=3, fontsize=n)
     plt.yticks(fontsize=n)
-    plt.savefig("./Benchmarking/MRChordlessVsJohnson_"+str(n)+"_"+str(p)+".png")
+    plt.savefig("./Benchmarking/MRChordlessVsJohnson_"+str(p)+".png")
+#############################
+#############################
 
-
-for k in range(1, 11):
+x = 10
+m = 10
+bound=20
+for k in tqdm(range(1, 101, 1), leave=False, total=20):
     p = k/100
+    print(p)
     timeDict = {}
     keys = []
-    for n in range(10, 100, 10):
-        print(n)
-        keys = []
+    list = range(m)
+    for i in tqdm(range(len(list)), leave = False, total=len(list)):
+        if i==0:
+            continue
+        n=i*x
         H=nx.algorithms.bipartite.random_graph(n=n, m=n, p=p, directed=True)
         
         timeStamp = time.time()
-        callFindMRChordlessCircuits(H, "Set")
+        print("Starting to compute MR-Chordless cycles with set")
+        callFindMRChordlessCircuits(H, "Set", bound)
         setTime = time.time()-timeStamp
         
         timeStamp = time.time()
-        callFindMRChordlessCircuits(H, "List")
+        print("Starting to compute MR-Chordless cycles with list")
+        callFindMRChordlessCircuits(H, "List", bound)
         listTime = time.time()-timeStamp
         
         timeStamp = time.time()
-        for c in nx.simple_cycles(H):
-            continue
+        print("Starting to compute all cycles")
+        for c in nx.simple_cycles(H, length_bound=bound):
+            checkCycle(c, H)
         johnsonTime = time.time()-timeStamp
-        
-        if n==10:
+        if n==1*x:
             timeDict["MR-chordlessSet"]=[setTime]
             timeDict["MR-chordlessList"]=[listTime]
             timeDict["Johnson"]=[johnsonTime]
@@ -302,5 +327,4 @@ for k in range(1, 11):
             timeDict["MR-chordlessList"].append(listTime)
             timeDict["Johnson"].append(johnsonTime)
         keys.append(n)
-    print(timeDict)
     plotResults(2*n, p, keys, timeDict)
