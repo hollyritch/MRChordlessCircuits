@@ -42,14 +42,12 @@ def chordless_cycle_search_Species(F, B, path:list, length_bound:int, metabolite
             Ba=B[a]
             for m in Ba:
                 bwBlocked[m] 
-    stack = [iter(F[path[2]])]
+    stack = [(x for x in F[path[2]])]
     if fwBlocked[path[1]]>1:
         return
     while stack:
         nbrs = stack[-1]
         for x in nbrs:
-            if x==target:
-                continue
             if x in metabolites:
                 proceed = (bwBlocked[x]==0 and (length_bound is None or len(path) < length_bound))
             else:
@@ -65,7 +63,7 @@ def chordless_cycle_search_Species(F, B, path:list, length_bound:int, metabolite
                     for m in Bx:
                         bwBlocked[m] += 1
                     path.append(x)
-                    stack.append(iter(Fx))
+                    stack.append((y for y in Fx if y != target))
                     break
             else:
                 Bx = B[x]
@@ -81,7 +79,7 @@ def chordless_cycle_search_Species(F, B, path:list, length_bound:int, metabolite
                         for m in Bx:
                             bwBlocked[m] += 1
                     path.append(x)
-                    stack.append(iter(Fx))
+                    stack.append((y for y in Fx if y !=target))
                     break
         else:                                       # Take off 
             stack.pop() 
@@ -231,17 +229,19 @@ def plotResults(minNoNodes:int, maxNoNodes:int, p:float, keys:set, path:str, tim
 #############################
 #############################
 
-l = 10
+l = int(sys.argv[1])
 maxSize = 6
 
-a = float(sys.argv[1])
-b = float(sys.argv[2])
+a = float(sys.argv[2])
+b = float(sys.argv[3])
+
 direc= "./Benchmarking/"+str(a)+"to"+str(b)
 if not os.path.exists(direc):
     os.makedirs(direc)
 
 bound=None
 timeDict = {}
+cycleDict = {}
 myList = range(maxSize)
 for k in tqdm(range(1, 11, 1), leave=False, total=10):
     p = k/200
@@ -288,7 +288,9 @@ for k in tqdm(range(1, 11, 1), leave=False, total=10):
 
             timeStamp = time.time()
             johnsonCounter = 0
+            totalJohnsonCounter = 0
             for c in nx.simple_cycles(L, length_bound=bound):
+                totalJohnsonCounter+=1
                 if checkCycle(c, L):
                     johnsonCounter+=1
             if setCounter!=johnsonCounter:                
@@ -313,6 +315,7 @@ for k in tqdm(range(1, 11, 1), leave=False, total=10):
                 timeDict["MR-chordlessList"].setdefault(setCounter, []).append(listTime)
                 timeDict["Johnson"].setdefault(setCounter, []).append(johnsonTime)
             keys.add(setCounter)
+            cycleDict[setCounter]=totalJohnsonCounter
     path = direc+ "/Benchmarking" +str(p) + "min_" + str(minNoNodes) + "max_" +str(maxNoNodes) +".pkl"
     plotResults(minNoNodes, maxNoNodes, p, sorted(list(keys)), direc, timeDict)
     with open(path, "wb") as file:
