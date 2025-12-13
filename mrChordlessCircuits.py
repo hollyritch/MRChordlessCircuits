@@ -27,11 +27,10 @@ class _NeighborhoodCache(dict):
 #############################
 
 
-def chordless_cycle_search_Species(F, B, path:list, length_bound:int, metabolites):
+def chordless_cycle_search_Species(F:nx.DiGraph, B:nx.DiGraph, path:list, length_bound:int, metabolites:set):
     fwBlocked = defaultdict(int)
     bwBlocked = defaultdict(int)
     target = path[0]
-    second = path[1]
     for i in range(len(path)):
         a = path[i]
         if i==0 or i==2:
@@ -41,13 +40,16 @@ def chordless_cycle_search_Species(F, B, path:list, length_bound:int, metabolite
         else:
             Ba=B[a]
             for m in Ba:
-                bwBlocked[m] 
-    stack = [(x for x in F[path[2]])]
+                bwBlocked[m] +=1
+
+    stack = [iter(F[path[2]])]
     if fwBlocked[path[1]]>1:
         return
     while stack:
         nbrs = stack[-1]
         for x in nbrs:
+            if x==target:
+                continue
             if x in metabolites:
                 proceed = (bwBlocked[x]==0 and (length_bound is None or len(path) < length_bound))
             else:
@@ -55,15 +57,14 @@ def chordless_cycle_search_Species(F, B, path:list, length_bound:int, metabolite
             if not proceed:
                 continue
             Fx = F[x]
-            
-            if target in Fx:                        # x is a reaction, target a metabolite
-                if bwBlocked[target]==0:                    
+            if target in Fx:                        # x is a reaction, target a metabolite    
+                if bwBlocked[target]==1:                    
                     yield path + [x]
                     Bx = B[x]
                     for m in Bx:
                         bwBlocked[m] += 1
                     path.append(x)
-                    stack.append((y for y in Fx if y != target))
+                    stack.append(iter(Fx))
                     break
             else:
                 Bx = B[x]
@@ -71,15 +72,13 @@ def chordless_cycle_search_Species(F, B, path:list, length_bound:int, metabolite
                     continue                        # we can probably remove this check, should have been done before
                 else:        
                     if x in metabolites:
-                        if second in Fx and fwBlocked[second]==1:
-                            continue
                         for r in Fx:
                             fwBlocked[r] += 1
                     else:
                         for m in Bx:
                             bwBlocked[m] += 1
                     path.append(x)
-                    stack.append((y for y in Fx if y !=target))
+                    stack.append(iter(Fx))
                     break
         else:                                       # Take off 
             stack.pop() 
@@ -114,13 +113,11 @@ def findAllMRChordlessCyclesList(F, reactions:set, metabolites:set, bound:int):
         if rx:
             v = next(iter(rx))
             Fc = F.subgraph(c)
-            Fcc = Bcc = None
+            Bc = B.subgraph(c)
             for S in stems(Fc, v):
-                if Fcc is None:
-                    Fcc = nx.algorithms.cycles._NeighborhoodCache(Fc)
-                    Bcc = nx.algorithms.cycles._NeighborhoodCache(B.subgraph(c))
+                Fcc = nx.algorithms.cycles._NeighborhoodCache(Fc)
+                Bcc = nx.algorithms.cycles._NeighborhoodCache(Bc)
                 yield from chordless_cycle_search_Species(Fcc, Bcc, S, bound, metabolites)
-                #yield from chordless_cycle_search(Fcc, Bcc, S, bound, F, maxIndex)
             components.extend(c for c in nx.strongly_connected_components(F.subgraph(c - {v})) if len(c) > 3)
 #############################
 #############################
@@ -229,6 +226,43 @@ def plotResults(minNoNodes:int, maxNoNodes:int, p:float, keys:set, path:str, tim
 #############################
 #############################
 
+
+def buildExampleGraph():
+    G=nx.DiGraph()
+    X=set()
+    R=set()
+
+    # Metabolites
+    G.add_node(7)
+    G.add_node(27)
+    G.add_node(14)
+    G.add_node(19)
+    X.add(7)
+    X.add(27)
+    X.add(14)
+    X.add(19)
+
+    # Reactions
+    G.add_node(36)
+    G.add_node(37)
+    G.add_node(58)
+    G.add_node(55)
+    R.add(36)
+    R.add(37)
+    R.add(58)
+    R.add(55)
+
+    G.add_edge(7,58)
+    G.add_edge(7,36)
+    G.add_edge(36,27)
+    G.add_edge(27,37)
+    G.add_edge(37,14)
+    G.add_edge(14,58)
+    G.add_edge(58,19)
+    G.add_edge(19,55)
+    G.add_edge(55,7)
+    return G, X, R
+
 l = int(sys.argv[1])
 maxSize = 6
 
@@ -243,6 +277,10 @@ bound=None
 timeDict = {}
 cycleDict = {}
 myList = range(maxSize)
+
+G,X,R = buildExampleGraph()
+
+
 for k in tqdm(range(1, 11, 1), leave=False, total=10):
     p = k/200
     keys = set()
@@ -302,7 +340,10 @@ for k in tqdm(range(1, 11, 1), leave=False, total=10):
                 for c in nx.simple_cycles(K, length_bound=bound):
                     if checkCycle(c, K):
                         print(c)
-                input()
+
+                x = int(input())
+                for c in findAllMRChordlessCyclesList2(deepcopy(G), R, X, bound, x):
+                    print("New cycle is", c)
             johnsonTime = time.time()-timeStamp
             if "MR-chordlessSet" not in timeDict:
                 timeDict["MR-chordlessSet"]={setCounter: [setTime]}
@@ -319,4 +360,4 @@ for k in tqdm(range(1, 11, 1), leave=False, total=10):
     path = direc+ "/Benchmarking" +str(p) + "min_" + str(minNoNodes) + "max_" +str(maxNoNodes) +".pkl"
     plotResults(minNoNodes, maxNoNodes, p, sorted(list(keys)), direc, timeDict)
     with open(path, "wb") as file:
-        pickle.dump(timeDict, file)
+        pickle.dump((timeDict, cycleDict), file)

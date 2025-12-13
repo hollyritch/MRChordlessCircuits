@@ -57,6 +57,8 @@ def chordless_cycle_search_Species(F, B, path, length_bound, G):
             for m in Ba:
                 bwBlocked[m] 
     stack = [iter(F[path[2]])]
+    if fwBlocked[path[1]]>1:
+        return
     while stack:
         nbrs = stack[-1]
         for x in nbrs:
@@ -89,7 +91,7 @@ def chordless_cycle_search_Species(F, B, path, length_bound, G):
                     continue                        # we can probably remove this check, should have been done before
                 else:        
                     if G.nodes[x]["Type"]=="Species":
-                        if second in Fx and fwBlocked[second]==1:
+                        if second in Fx:
                             continue
                         for r in Fx:
                             fwBlocked[r] += 1
@@ -114,69 +116,69 @@ def chordless_cycle_search_Species(F, B, path, length_bound, G):
 #############################
 
 
-def chordless_cycle_search_Reaction(F, B, path, length_bound, G):
-    ## Reaction is the first node
-    fwBlocked = defaultdict(int)                                    # will contain only reactions
-    bwBlocked = defaultdict(int)                                    # will contain only metabolites‚
-    target = path[0]                                                # Target is a reaction
-    for i in range(1,len(path)):                                      # Initializing
-        a = path[i]
-        if i%2==0:                                                  # Reaction case 
-            Ba=B[a]
-            for m in Ba:
-                bwBlocked[m] +=1                                    # Block m from being visited (only unvisited metabolites can be visited)
-        else:      
-            Fa=F[a]                                                 # Species case
-            for r in Fa:                                            # Block reactions from being visited twice
-                fwBlocked[r] += 1
-    stack = [iter(F[path[2]])]
-    while stack:                                                    # Now the real loop
-        nbrs = stack[-1]
-        for x in nbrs:
-            if G.nodes[x]["Type"] == "Species":
-                proceed = (bwBlocked[x]==0 and (length_bound is None or len(path) < length_bound))
-            else:
-                proceed = (fwBlocked[x] == 1 and (length_bound is None or len(path) < length_bound))
-            if not proceed:
-                continue
-            Fx = F[x]
-            if target in Fx:                            # Remember: x is a metabolite
-                if sum(1 for y in Fx if y in path)==1 and fwBlocked[target]==0:
-                    yield path + [x]                    # yield the path and stop.....you can' go any further, otherwise there would be non MR-chordfree cycles
-                else:
-                    print("Unfortunately....it does not work")
-            else:                                   
-                if G.nodes[x]["Type"]=="Species":   # Block forward in the case of a metabolite
-                    for y in Fx:
-                        fwBlocked[y] += 1
-                else:                               
-                    Bx = B[x]
-                    for y in Bx:                    # Block backward in case of a reaction
-                        bwBlocked[y] += 1
-                path.append(x)                      # Either way, append x to the path add all forward oriented vertices 
-                                                    # to the stack
-                stack.append(iter(Fx))
-                break
-        else:                                       # Take off 
-            stack.pop() 
-            z = path.pop()
-            if G.nodes[z]["Type"]=="Species":
-                Fz=F[z]
-                for y in Fz:
-                    fwBlocked[y] -= 1
-            else:
-                Bz = B[z]
-                for y in Bz:
-                    bwBlocked[y] -= 1
-#############################
-#############################
+# def chordless_cycle_search_Reaction(F, B, path, length_bound, G, maxIndex):
+#     ## Reaction is the first node
+#     fwBlocked = [0 for i in range(maxIndex+1)]
+#     bwBlocked = [0 for i in range(maxIndex+1)]
+#     target = path[0]                                                # Target is a reaction
+#     for i in range(1,len(path)):                                      # Initializing
+#         a = path[i]
+#         if i%2==0:                                                  # Reaction case 
+#             Ba=B[a]
+#             for m in Ba:
+#                 bwBlocked[m] +=1                                    # Block m from being visited (only unvisited metabolites can be visited)
+#         else:      
+#             Fa=F[a]                                                 # Species case
+#             for r in Fa:                                            # Block reactions from being visited twice
+#                 fwBlocked[r] += 1
+#     stack = [iter(F[path[2]])]
+#     while stack:                                                    # Now the real loop
+#         nbrs = stack[-1]
+#         for x in nbrs:
+#             if G.nodes[x]["Type"] == "Species":
+#                 proceed = (bwBlocked[x]==0 and (length_bound is None or len(path) < length_bound))
+#             else:
+#                 proceed = (fwBlocked[x] == 1 and (length_bound is None or len(path) < length_bound))
+#             if not proceed:
+#                 continue
+#             Fx = F[x]
+#             if target in Fx:                            # Remember: x is a metabolite
+#                 if sum(1 for y in Fx if y in path)==1 and fwBlocked[target]==0:
+#                     yield path + [x]                    # yield the path and stop.....you can' go any further, otherwise there would be non MR-chordfree cycles
+#                 else:
+#                     print("Unfortunately....it does not work")
+#             else:                                   
+#                 if G.nodes[x]["Type"]=="Species":   # Block forward in the case of a metabolite
+#                     for y in Fx:
+#                         fwBlocked[y] += 1
+#                 else:                               
+#                     Bx = B[x]
+#                     for y in Bx:                    # Block backward in case of a reaction
+#                         bwBlocked[y] += 1
+#                 path.append(x)                      # Either way, append x to the path add all forward oriented vertices 
+#                                                     # to the stack
+#                 stack.append(iter(Fx))
+#                 break
+#         else:                                       # Take off 
+#             stack.pop() 
+#             z = path.pop()
+#             if G.nodes[z]["Type"]=="Species":
+#                 Fz=F[z]
+#                 for y in Fz:
+#                     fwBlocked[y] -= 1
+#             else:
+#                 Bz = B[z]
+#                 for y in Bz:
+#                     bwBlocked[y] -= 1
+# #############################
+# #############################
 
 
-def chordless_cycle_search(F, B, path, length_bound, G):
-    if G.nodes[path[0]]["Type"]=="Species":
-        yield from chordless_cycle_search_Species(F, B, path, length_bound, G)
-    else:
-        yield from chordless_cycle_search_Reaction(F, B, path, length_bound, G)
+# def chordless_cycle_search(F, B, path, length_bound, G, maxIndex):
+#     if G.nodes[path[0]]["Type"]=="Species":
+#         yield from chordless_cycle_search_Species(F, B, path, length_bound, G, maxIndex)
+#     else:
+#         yield from chordless_cycle_search_Reaction(F, B, path, length_bound, G, maxIndex)
 #############################
 #############################
 
@@ -199,7 +201,8 @@ def findAllMRChordlessCycles(F, reactions, bound):
             if Fcc is None:
                 Fcc = _NeighborhoodCache(Fc)
                 Bcc = _NeighborhoodCache(B.subgraph(c))
-            yield from chordless_cycle_search(Fcc, Bcc, S, bound, F)
+            yield from chordless_cycle_search_Species(Fcc, Bcc, S, bound, F)
+            #yield from chordless_cycle_search(Fcc, Bcc, S, bound, F, maxIndex)
         components.extend(c for c in nx.strongly_connected_components(F.subgraph(c - {v})) if len(c) > 3)
 #############################
 #############################
@@ -316,11 +319,15 @@ def analysePartitionTree(parameters, partitionTree:nx.DiGraph, siblings:dict, le
     visited = copy(leaves)                          # Store what has already been visited
     if coreBool==True:
         print("Only going in here")
+        coreTimeStamp = time.time()
         for N in partitionTree.nodes():
             if len(partitionTree.in_edges(N))==0:
                 subN, metabolites, reactions=generateSubnetwork(N, network)
         MRChordlessCircuits = findAllMRChordlessCycles(subN, reactions, bound)
         circuitCounter = processCircuitsSuperCore(circuits = MRChordlessCircuits, circuitCounter = 0)
+        coreTime = time.time()-coreTimeStamp
+        print("Time needed for cores", coreTime)
+        parameters["CoreTime"] = coreTime
     else:
         # 3. Define necessary variables
         while True:
@@ -1020,10 +1027,16 @@ def determineStability(T:np.matrix):
     k = np.shape(T)[0]
     unstable = False
     if k>=3:
-        sM = sc.sparse.csr_matrix(T)
-        lamda = sc.sparse.linalg.eigs(sM, k=1, which = "LR", return_eigenvectors = False)
-        if round(np.real(lamda[0]), 5)>0:
-            unstable = True   
+        try:
+            sM = sc.sparse.csr_matrix(T)
+            lamda = sc.sparse.linalg.eigs(sM, k=1, which = "LR", return_eigenvectors = False)
+            if round(np.real(lamda[0]), 5)>0:
+                unstable = True   
+        except sc.sparse.linalg.ArpackNoConvergence as e:
+            for lamda in np.linalg.eigvals(T):
+                if round(np.real(lamda),5)>0:        
+                    unstable = True
+                    break    
     else:
         for lamda in np.linalg.eigvals(T):
             if round(np.real(lamda),5)>0:        
@@ -1603,6 +1616,7 @@ def assembleCores(parameters:dict, Q:deque, E:dict, speedCores:set):
                     except Exception as exc:
                         print('%r generated an exception: %s', exc)
                         print(traceback.format_exc())
+                        input()
         else:
             equivClass = Q.popleft()
             intersecEquivClasses= getIntersectingEquivClassesCores(equivClass, E)
@@ -1985,16 +1999,16 @@ def checkUniquenessOfCores(cores:set):
     global noCore
     print("Checking cores now for inclusion")
     if len(cores)>1e4:
-        if len(cores)>1e6:
-            threads = 128
-            k = int(len(cores)/128)
-            coreL = list(cores)
-            coreList = list(list(coreL[i*k:(i+1)*k]) for i in range(threads-1))
-            coreL.append(list(coreL[(threads-1)*k:]))
-            realCores = deepcopy(cores)
-            alternativeInclusionCheck(cores, realCores, coreList, threads)
-        else:
-            realCores = conventionalInclusionCheck(cores, set())
+        # if len(cores)>5e4:
+        #     threads = 128
+        #     k = int(len(cores)/128)
+        #     coreL = list(cores)
+        #     coreList = list(list(coreL[i*k:(i+1)*k]) for i in range(threads-1))
+        #     coreL.append(list(coreL[(threads-1)*k:]))
+        #     realCores = deepcopy(cores)
+        #     alternativeInclusionCheck(cores, realCores, coreList, threads)
+        # else:
+        realCores = conventionalInclusionCheck(cores, set())
     else:
         for c in cores:
             coreFlag = True
