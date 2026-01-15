@@ -16,7 +16,8 @@ import gc
 from itertools import cycle
 from itertools import chain
 from collections import deque
-from checkMatch import assembleCython, checkMatch, assembleCythonCores
+#from checkMatch import assembleCython, checkMatch, assembleCythonCores
+from check_match import assembleCython, checkMatch, assembleCythonCores
 import traceback
 import libsbml
 import networkx as nx
@@ -40,7 +41,7 @@ class _NeighborhoodCache(dict):
         return Gv
 
 
-def chordless_cycle_search_Species(F, B, path, length_bound, G):
+def chordless_cycle_search(F, B, path, length_bound, X):
     global parameters
     fwBlocked = defaultdict(int)
     bwBlocked = defaultdict(int)
@@ -55,16 +56,14 @@ def chordless_cycle_search_Species(F, B, path, length_bound, G):
         else:
             Ba=B[a]
             for m in Ba:
-                bwBlocked[m] 
-    stack = [iter(F[path[2]])]
+                bwBlocked[m] +=1
     if fwBlocked[path[1]]>1:
         return
+    stack = [iter(F[path[2]])]
     while stack:
         nbrs = stack[-1]
         for x in nbrs:
-            if x==target:
-                continue
-            if G.nodes[x]["Type"] == "Species":
+            if x in X:
                 proceed = (bwBlocked[x]==0 and (length_bound is None or len(path) < length_bound))
             else:
                 proceed = (fwBlocked[x] == 1 and (length_bound is None or len(path) < length_bound))
@@ -72,39 +71,33 @@ def chordless_cycle_search_Species(F, B, path, length_bound, G):
                 continue
             Fx = F[x]
             
-            if target in Fx:                        # x is a reaction, target a metabolite
-                if bwBlocked[target]==0:                    
-                    mrEdgeSet = getEquivalenceClass(path + [x])
-                    subS, metzler = computeSubstochasticMatrixForSetOfMREdges(parameters, mrEdgeSet)
-                    autocatalytic = determineStability(subS)
-                    yield (path + [x], subS, metzler, mrEdgeSet, autocatalytic)                    # yield the path
-                    if autocatalytic==False:
-                        Bx = B[x]
-                        for m in Bx:
-                            bwBlocked[m] += 1
-                        path.append(x)
-                        stack.append(iter(Fx))
-                        break
-            else:
-                Bx = B[x]
-                if target in Bx:                    # since target is a metabolite, then x is a reaction
-                    continue                        # we can probably remove this check, should have been done before
-                else:        
-                    if G.nodes[x]["Type"]=="Species":
-                        if second in Fx:
-                            continue
-                        for r in Fx:
-                            fwBlocked[r] += 1
-                    else:
-                        for m in Bx:
-                            bwBlocked[m] += 1
+            if target in Fx:                                        # x is a reaction, target a metabolite                    
+                mrEdgeSet = getEquivalenceClass(path + [x])
+                subS, metzler = computeSubstochasticMatrixForSetOfMREdges(parameters, mrEdgeSet)
+                autocatalytic = determineStability(subS)
+                yield (path + [x], subS, metzler, mrEdgeSet, autocatalytic)                    # yield the path
+                if autocatalytic==False:
+                    Bx = B[x]
+                    for m in Bx:
+                        bwBlocked[m] += 1
                     path.append(x)
                     stack.append(iter(Fx))
                     break
+            else:
+                Bx = B[x]
+                if x in X:
+                    for r in Fx:
+                        fwBlocked[r] += 1
+                else:
+                    for m in Bx:
+                        bwBlocked[m] += 1
+                path.append(x)
+                stack.append(iter(Fx))
+                break
         else:                                       # Take off 
             stack.pop() 
             z = path.pop()
-            if G.nodes[z]["Type"]=="Species":
+            if z in X:
                 Fz=F[z]
                 for y in Fz:
                     fwBlocked[y] -= 1
@@ -116,94 +109,32 @@ def chordless_cycle_search_Species(F, B, path, length_bound, G):
 #############################
 
 
-# def chordless_cycle_search_Reaction(F, B, path, length_bound, G, maxIndex):
-#     ## Reaction is the first node
-#     fwBlocked = [0 for i in range(maxIndex+1)]
-#     bwBlocked = [0 for i in range(maxIndex+1)]
-#     target = path[0]                                                # Target is a reaction
-#     for i in range(1,len(path)):                                      # Initializing
-#         a = path[i]
-#         if i%2==0:                                                  # Reaction case 
-#             Ba=B[a]
-#             for m in Ba:
-#                 bwBlocked[m] +=1                                    # Block m from being visited (only unvisited metabolites can be visited)
-#         else:      
-#             Fa=F[a]                                                 # Species case
-#             for r in Fa:                                            # Block reactions from being visited twice
-#                 fwBlocked[r] += 1
-#     stack = [iter(F[path[2]])]
-#     while stack:                                                    # Now the real loop
-#         nbrs = stack[-1]
-#         for x in nbrs:
-#             if G.nodes[x]["Type"] == "Species":
-#                 proceed = (bwBlocked[x]==0 and (length_bound is None or len(path) < length_bound))
-#             else:
-#                 proceed = (fwBlocked[x] == 1 and (length_bound is None or len(path) < length_bound))
-#             if not proceed:
-#                 continue
-#             Fx = F[x]
-#             if target in Fx:                            # Remember: x is a metabolite
-#                 if sum(1 for y in Fx if y in path)==1 and fwBlocked[target]==0:
-#                     yield path + [x]                    # yield the path and stop.....you can' go any further, otherwise there would be non MR-chordfree cycles
-#                 else:
-#                     print("Unfortunately....it does not work")
-#             else:                                   
-#                 if G.nodes[x]["Type"]=="Species":   # Block forward in the case of a metabolite
-#                     for y in Fx:
-#                         fwBlocked[y] += 1
-#                 else:                               
-#                     Bx = B[x]
-#                     for y in Bx:                    # Block backward in case of a reaction
-#                         bwBlocked[y] += 1
-#                 path.append(x)                      # Either way, append x to the path add all forward oriented vertices 
-#                                                     # to the stack
-#                 stack.append(iter(Fx))
-#                 break
-#         else:                                       # Take off 
-#             stack.pop() 
-#             z = path.pop()
-#             if G.nodes[z]["Type"]=="Species":
-#                 Fz=F[z]
-#                 for y in Fz:
-#                     fwBlocked[y] -= 1
-#             else:
-#                 Bz = B[z]
-#                 for y in Bz:
-#                     bwBlocked[y] -= 1
-# #############################
-# #############################
-
-
-# def chordless_cycle_search(F, B, path, length_bound, G, maxIndex):
-#     if G.nodes[path[0]]["Type"]=="Species":
-#         yield from chordless_cycle_search_Species(F, B, path, length_bound, G, maxIndex)
-#     else:
-#         yield from chordless_cycle_search_Reaction(F, B, path, length_bound, G, maxIndex)
-#############################
-#############################
-
-
-def findAllMRChordlessCycles(F, reactions, bound):
+def findAllMRChordlessCycles(F, R, X, bound):
     B = F.reverse(copy=True)
+    for u in X:
+        Fu = F.successors(u)
+        digons = [[u, v] for v in Fu if F.has_edge(v, u)]
+        yield from digons
+        
     def stems(C, v):
         for u, w in product(C.pred[v], C.succ[v]):
             yield [u, v, w]
 
     components = [c for c in nx.strongly_connected_components(F) if len(c) > 3]
     while components:
-        c = components.pop()
-        for v in c:
-            if v in reactions:
-                break
-        Fc = F.subgraph(c)
-        Fcc = Bcc = None
-        for S in stems(Fc, v):
-            if Fcc is None:
-                Fcc = _NeighborhoodCache(Fc)
-                Bcc = _NeighborhoodCache(B.subgraph(c))
-            yield from chordless_cycle_search_Species(Fcc, Bcc, S, bound, F)
-            #yield from chordless_cycle_search(Fcc, Bcc, S, bound, F, maxIndex)
-        components.extend(c for c in nx.strongly_connected_components(F.subgraph(c - {v})) if len(c) > 3)
+        comp = components.pop()
+        rx = R & comp
+        if rx:
+            v = next(iter(rx))
+            Fc = F.subgraph(comp)
+            Bc = B.subgraph(comp)
+            for S in stems(Fc, v):
+                if S[0]==S[2]:
+                    continue
+                Fcc = nx.algorithms.cycles._NeighborhoodCache(Fc)
+                Bcc = nx.algorithms.cycles._NeighborhoodCache(Bc)
+                yield from chordless_cycle_search(Fcc, Bcc, S, bound, X)
+            components.extend(c for c in nx.strongly_connected_components(F.subgraph(comp - {v})) if len(c) > 3)
 #############################
 #############################
 
@@ -322,8 +253,8 @@ def analysePartitionTree(parameters, partitionTree:nx.DiGraph, siblings:dict, le
         coreTimeStamp = time.time()
         for N in partitionTree.nodes():
             if len(partitionTree.in_edges(N))==0:
-                subN, metabolites, reactions=generateSubnetwork(N, network)
-        MRChordlessCircuits = findAllMRChordlessCycles(subN, reactions, bound)
+                subN, metabolites, reactions = generateSubnetwork(N, network)
+        MRChordlessCircuits = findAllMRChordlessCycles(subN, reactions, metabolites, bound)
         circuitCounter = processCircuitsSuperCore(circuits = MRChordlessCircuits, circuitCounter = 0)
         coreTime = time.time()-coreTimeStamp
         print("Time needed for cores", coreTime)
@@ -524,7 +455,7 @@ def analysePartitionTree(parameters, partitionTree:nx.DiGraph, siblings:dict, le
 
 def callAssembleCython(equivClass:frozenset, equivClassValues:dict, cutoff:int):
     global elemE, M, circuitIdMrEdgeDict
-    newEquivClasses, change = assembleCython(equivClass, equivClassValues,  elemE, M, circuitIdMrEdgeDict, cutoff)
+    newEquivClasses, change = assembleCython(equivClass, equivClassValues, elemE, M, circuitIdMrEdgeDict, cutoff)
     return newEquivClasses, change
 #############################
 #############################
@@ -1162,7 +1093,7 @@ def generateSubnetwork(subG:dict, metabolicNetwork:dict):
         for outEdge in metabolicNetwork.out_edges(r):
             metabolites.add(outEdge[1])
     subnetwork = nx.subgraph(metabolicNetwork, metabolites.union(subGReactions)).copy()
-    return subnetwork, sorted(list(metabolites)), sorted(list(subGReactions))
+    return subnetwork, metabolites, subGReactions
 #############################
 #############################
 
@@ -1580,8 +1511,9 @@ def assembleCores(parameters:dict, Q:deque, E:dict, speedCores:set):
     cutoff = parameters["cutoffLargerCycles"]
     while Q:
         if len(speedCores)>1e4:
-            maxVal = min(int(2e12/len(Q)), len(Q))
-            with concurrent.futures.ProcessPoolExecutor(max_workers=noThreads) as executor:
+            #maxVal = min(int(2e12/len(Q)), len(Q))
+            maxVal = min(int(1e4), len(Q))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=noThreads) as executor:
                 for f in tqdm(concurrent.futures.as_completed(executor.submit(callAssembleCythonCores, Q[i], E[Q[i]], cutoff) for i in range(maxVal)), total=maxVal, leave = False):
                     Q.popleft()
                     try:
@@ -1616,6 +1548,7 @@ def assembleCores(parameters:dict, Q:deque, E:dict, speedCores:set):
                     except Exception as exc:
                         print('%r generated an exception: %s', exc)
                         print(traceback.format_exc())
+                        traceback.print_stack()
                         input()
         else:
             equivClass = Q.popleft()
@@ -1651,7 +1584,13 @@ def assembleCores(parameters:dict, Q:deque, E:dict, speedCores:set):
 
 def callAssembleCythonCores(equivClass:frozenset, equivClassValues:dict, cutoff:int):
     global elemE, M, circuitIdMrEdgeDict, bigS, mID, rID
-    newEquivClasses, change = assembleCythonCores(equivClass, equivClassValues, elemE, M, circuitIdMrEdgeDict, cutoff, bigS, mID, rID)
+    try:
+        newEquivClasses, change = assembleCythonCores(equivClass, equivClassValues, elemE, M, circuitIdMrEdgeDict, cutoff, bigS, mID, rID)
+    except Exception as e:
+        print(e)
+        print(traceback.format_exc())
+        traceback.print_stack()
+        input()
     return equivClass, newEquivClasses, change
 #############################
 #############################
@@ -1711,7 +1650,7 @@ def checkEquivalenceClassCore(c, eqClass, autocatalytic):
             mr[e[0]]=e[1]
             rm[e[1]]=e[0]
         circuitIdMrEdgeDict[i] = frozenEq                           # Remember for this particular elementary circuit, which     
-        E[frozenEq] = {"MR": mr, "RM": rm, "Predecessors": set(), "Leaf": True, "Autocatalytic": autocatalytic, "Metzler": True, "Visited": True, "Core": autocatalytic}     # Add new equivalence class to E with corresponding dictionary for M-R and R-M relationship, a set for precursors, and four flags: autocatalytic, Metzler, leaf, visited
+        E[frozenEq] = {"MR": mr, "RM": rm, "Predecessors": set(), "Leaf": True, "Autocatalytic": autocatalytic, "Metzler": True, "Visited": True, "Core": autocatalytic, "Size": 1}     # Add new equivalence class to E with corresponding dictionary for M-R and R-M relationship, a set for precursors, and four flags: autocatalytic, Metzler, leaf, visited
         circuitIdDict[i] = c
         if autocatalytic == True:
             speedCores.add(frozenEq)
@@ -1719,10 +1658,6 @@ def checkEquivalenceClassCore(c, eqClass, autocatalytic):
     else:
         print("Found something twice", c, eqClass)
         return False
-#############################
-#############################  
-
-    return
 #############################
 #############################
 
@@ -1788,7 +1723,7 @@ def checkEquivalenceClassSuperCore(c, eqClass, autocatalytic):
     Classify elementary circuits into equivalence classes according their 
     vertices and edges.
 
-    On invocation, this function determines information about the vertices 
+    Upon invocation, this function determines information about the vertices 
     and edges of elementary circuits given on the list queue. Importantly,
     elementary circuits vertex and edge-sets (E and E1: only metabolite -> reaction edges) serve 
     as keys and elementary circuits are stored according to equivalence classes
@@ -1836,7 +1771,15 @@ def checkEquivalenceClassSuperCore(c, eqClass, autocatalytic):
             mr[e[0]]=e[1]
             rm[e[1]]=e[0]
         circuitIdMrEdgeDict[i] = frozenEq                           # Remember for this particular elementary circuit, which     
-        E[frozenEq] = {"MR": mr, "RM": rm, "Predecessors": set(), "Leaf": True, "Autocatalytic": autocatalytic, "Metzler": True, "Visited": True, "Core": autocatalytic}     # Add new equivalence class to E with corresponding dictionary for M-R and R-M relationship, a set for precursors, and four flags: autocatalytic, Metzler, leaf, visited
+        E[frozenEq] = {"MR": mr, 
+                       "RM": rm, 
+                       "Predecessors": set(), 
+                       "Leaf": True, 
+                       "Autocatalytic": autocatalytic, 
+                       "Metzler": True, 
+                       "Visited": True, 
+                       "Core": autocatalytic}                       # Add new equivalence class to E with corresponding 
+                                                                    # dictionary for M-R and R-M relationship, a set for precursors, and four flags: autocatalytic, Metzler, leaf, visited
         circuitIdDict[i] = c
         if autocatalytic == True:
             speedCores.add(frozenEq)
@@ -1855,8 +1798,8 @@ def checkEquivalenceClassSuperCore(c, eqClass, autocatalytic):
 
 
 def processCircuitsSuperCore(circuits, circuitCounter:int):
-    for c in circuits:
-        circuit, subS, metzler, eqClass, autocatalytic = c
+    for circ in circuits:
+        circuit, subS, metzler, eqClass, autocatalytic = circ
         l = len(circuit)
         cycleLengthDict[l]=cycleLengthDict.setdefault(l,0)+1
         if checkEquivalenceClassCore(circuit, eqClass, autocatalytic):

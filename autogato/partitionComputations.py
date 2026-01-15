@@ -9,15 +9,12 @@ import sys
 
 
 def computeExpectedShRed(ShReD:np.matrix):
-    counter = 0
     P = np.zeros((np.shape(ShReD)[0], np.shape(ShReD)[1]))
     n = np.shape(P)[0]
     m = np.shape(P)[1]
-    total = (n)**2 * (m)
     # Vorverarbeitung
     Di = np.zeros((n,1))
-    Dj = np.zeros((m,1))
-    
+    Dj = np.zeros((m,1))    
     for i in tqdm(range(n), leave = False, desc="expectedShRed PreComputation 1/3"):
         sum_i = 0
         D_i=0
@@ -37,7 +34,7 @@ def computeExpectedShRed(ShReD:np.matrix):
                 sum_j += ShReD[j][k]
         if D_j!=0:
             Dj[j] = sum_j/D_j
-            
+    
     for i in tqdm(range(n), leave = False, desc="expectedShRed PreComputation 3/3"):
         for j in range(m):
             if ShReD[i][j]==0:
@@ -45,13 +42,14 @@ def computeExpectedShRed(ShReD:np.matrix):
             if np.isinf(ShReD[i][j])==True:
                 P[i][j]=0
                 continue
-            P[i][j] = 1/2 * (Di[i] + Dj[j])
+            P[i][j] = 1/2 * (Di[i][0] + Dj[j][0])
     return P           
 #############################
 #############################
 
 
-def computShortestPath(reactionNetwork:nx.DiGraph, nodeList:list, i:int):
+def computShortestPath(nodeList:list, i:int):
+    global RN
     resultList = []
     n1 = nodeList[i]
     for j in range(len(nodeList)):
@@ -59,8 +57,8 @@ def computShortestPath(reactionNetwork:nx.DiGraph, nodeList:list, i:int):
             continue
         else:
             n2 = nodeList[j]
-            if nx.has_path(reactionNetwork,n1,n2)==True and nx.has_path(reactionNetwork, n2,n1):
-                d = len(nx.shortest_path(reactionNetwork,n1,n2))+len(nx.shortest_path(reactionNetwork,n2,n1))-2
+            if nx.has_path(RN,n1,n2)==True and nx.has_path(RN, n2,n1):
+                d = len(nx.shortest_path(RN,n1,n2))+len(nx.shortest_path(RN,n2,n1))-2
                 resultList.append(d) 
             else:
                 resultList.append(np.inf)
@@ -70,7 +68,9 @@ def computShortestPath(reactionNetwork:nx.DiGraph, nodeList:list, i:int):
 
 
 def computeShortestPathMatrix(reactionNetwork:nx.DiGraph, noThreads:int):
+    global RN
     nodes = sorted(list((reactionNetwork.nodes())))
+    RN = reactionNetwork
     n = len(nodes)
     A = np.zeros((n, n))
     if sys.platform.startswith("linux"):
@@ -79,7 +79,7 @@ def computeShortestPathMatrix(reactionNetwork:nx.DiGraph, noThreads:int):
         executor = concurrent.futures.ThreadPoolExecutor()
     else:
         executor = concurrent.futures.ProcessPoolExecutor()
-    futureSet = {executor.submit(computShortestPath, reactionNetwork, nodes,  i) for i in range(n)}
+    futureSet = {executor.submit(computShortestPath, nodes, i) for i in range(n)}
     for future in tqdm(concurrent.futures.as_completed(futureSet), total=len(futureSet), leave = False, desc="ShortestPathMatrix"):
         try:
             resultsList, k = future.result()
@@ -320,3 +320,8 @@ def continuePartitioning(s:np.matrix, nodes:set, undirectedReactionNetwork:nx.Gr
 #############################
 
 
+
+
+### Main
+
+global RN

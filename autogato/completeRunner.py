@@ -34,7 +34,7 @@ for k in tqdm(range(len(speciesList)), desc="Species"):
         if os.path.exists("./Results") == False:
             os.makedirs("./Results")
         partitioningOutputFile = "./Results/partitioningOutput" + species + xmlFile+".txt"
-        os.system("python partitionNetwork.py " + " -i " + xmlFilePath + " -c " + str(cutOffReactionNetworkSize) + " -t " + str(maxThreads) + " -o " + str(species) + " -s ./SmallMolecules/" + str(smallMoleculesPath) + " | tee " + str(partitioningOutputFile))
+        #os.system("python partitionNetwork.py " + " -i " + xmlFilePath + " -c " + str(cutOffReactionNetworkSize) + " -t " + str(maxThreads) + " -o " + str(species) + " -s ./SmallMolecules/" + str(smallMoleculesPath) + " | tee " + str(partitioningOutputFile))
         pickleFileList = os.listdir("PickleFiles/" + str(species))
         analysisOutputFile = "./Results/analysisOutput" + species + xmlFile+ ".txt"
         for j in tqdm(range(len(pickleFileList)), leave = False, desc="Pickle-Files"):
