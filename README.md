@@ -1,6 +1,6 @@
 # 1. General
 
-This Github-Repository is divided into two parts. The first part is a python script that enumerates mrchordless circuits in randomly generated bipartite graphs. The second is autogatito, which is an 
+This Github-Repository is divided into two parts. The first part is a python script that enumerates MR-chordless circuits in randomly generated bipartite graphs. The second is autogatito, which is an 
 exension of autogato (https://github.com/hollyritch/autogato) and currently located here due to revision and publication purposes. During the review process reviewers should be able to focus only on autogatito 
 which is therefore separated from the main autogato repository. The moment autogatito is accepted for publication the extensions will be integrated into autogato as a new development branch and an updated
 version of autogato released. For now, autogatito is maintained here and contains the core implementation of autogato. 
@@ -17,7 +17,7 @@ The handling is fairly easy. If you want to test the script, just install the fo
 
 For simple enumeration of random graphs run: 
 
-# python mrChordlessCircuit.py <k> <m> <n>
+**python mrChordlessCircuit.py <k> <m> <n>**
 
 where m/n is the ratio of metabolite to reactions and k*m therefore specifies the number of metabolites and k*n the number of reactions. Thus 10 2 1 will 
 produce graphs with 2*10 = 20 metabolites and 1*10 = 10 reactions vertices. The number of vertices increase by k*(n+m) (30 in the example) for 5 iterations, thus, MR-ChordlessCircuits and also elementary circuits will be enumerated in graphs of sizes 30, 60, 90, 120, 
@@ -26,12 +26,12 @@ and may require long computation times. Output will be saved into a separate fol
 
 To enumerate MR-chordless circuits on fluffles, choose the option ear. In this case, provide first the number of ears that you maximally want to have attached and then the maximum length of an ear. An example call is:
 
-# python mrChordlessCircuits.py 10 20 ears
+**python mrChordlessCircuits.py 10 20 ears**
 
 In this example an elementary circuit will be attached with a maximum of 10 ears of maximum size 20. However, the algorithm will generate all combinations, i.e. starts with an elemenatry circuit to which 1 ear of max. size 2 is attached, 
 then 1 ear of max-size 2, etc. The maximum is then a fluffle with 10 ears of which each is of max. size 20.
 
-# 3. Autogatio
+# 3. Autogatito
 
 Autogatito is a python package designed to compute all autocatalytic cores in metabolic networks upto a given size. As autogato (see https://github.com/hollyritch/autogato) it consists of the following modules:
 
@@ -46,7 +46,7 @@ Autogatito is a python package designed to compute all autocatalytic cores in me
 It takes sbml-models as input works for BIGG-Models and all other SBML-3 models. In the usage section we describe how to use the programme. We also provide a testscript for comuting autocatalytic cores for the e_coli_core model. 
 Linux and Mac systems are now supported due to usage of ProcessPoolExecutor or ThreadPoolExecture. 
 
-# 2. Installation and Setup
+# 3.1. Installation and Setup
 
 Prior to usage, setup a new conda environment with Python 3 (preferably 3.13 work fine) and install the following packages:
 
@@ -60,13 +60,13 @@ Prior to usage, setup a new conda environment with Python 3 (preferably 3.13 wor
 
 Clone the git, activate your conda environment, and first perform the following command:
 
-python setup.py build_ext --inplace
+\textbf{python setup.py build_ext --inplace}
 
 to compile checkMatch.pyx so that it can be imported as a normal in all partitionAnalysis.py
 
-# 3. Usage
+# 3.2 Usage
 
-## 3.1 Partition the Network
+## 3.2.1 Partition the Network
 
 First call partition Network via the following command:
 
@@ -80,11 +80,11 @@ You can provide additional options:
 
 If the network decomposes into multiple strongly connected components, each of these components larger than the defined cutoff will generate a .pkl-outputfile.
 
-## 3.2 Analyse the partitioned network
+## 3.2.2 Analyse the partitioned network
 
 Secondly, you partition the network by using the output from the first
 
-- python partitionAnalysis.py -x < XMLFile > -i < inputPickleFile > -s < Species >
+**python partitionAnalysis.py -x < XMLFile > -i < inputPickleFile > -s < Species >**
 
 Again you have multiple options:
 
@@ -107,12 +107,12 @@ Again you have multiple options:
 
 # Important for enumerating cores: Do use -c or --cores otherwise autogato is called which will enumerate all irreducible autocatalytic subsystems.
 
-## 3.3 Test usage
+## 3.2.3 Test usage
 
 To get familiar with the package, open test.py and modify the variables provided and call it via:
 
-python test.py
+**python test.py**
 
-You can add or modify the different parameters to see the specifics for your system.
+You can add or modify the different parameters in test.py to see the specifics for your system.
 
      
