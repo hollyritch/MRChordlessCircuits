@@ -17,7 +17,7 @@ The handling is fairly easy. If you want to test the script, just install the fo
 
 For simple enumeration of random graphs run: 
 
-\textbf{python mrChordlessCircuit.py <k> <m> <n>}
+**python mrChordlessCircuit.py <k> <m> <n>**
 
 where m/n is the ratio of metabolite to reactions and k*m therefore specifies the number of metabolites and k*n the number of reactions. Thus 10 2 1 will 
 produce graphs with 2*10 = 20 metabolites and 1*10 = 10 reactions vertices. The number of vertices increase by k*(n+m) (30 in the example) for 5 iterations, thus, MR-ChordlessCircuits and also elementary circuits will be enumerated in graphs of sizes 30, 60, 90, 120, 
@@ -26,7 +26,7 @@ and may require long computation times. Output will be saved into a separate fol
 
 To enumerate MR-chordless circuits on fluffles, choose the option ear. In this case, provide first the number of ears that you maximally want to have attached and then the maximum length of an ear. An example call is:
 
-\textbf{python mrChordlessCircuits.py 10 20 ears}
+**python mrChordlessCircuits.py 10 20 ears**
 
 In this example an elementary circuit will be attached with a maximum of 10 ears of maximum size 20. However, the algorithm will generate all combinations, i.e. starts with an elemenatry circuit to which 1 ear of max. size 2 is attached, 
 then 1 ear of max-size 2, etc. The maximum is then a fluffle with 10 ears of which each is of max. size 20.
@@ -84,7 +84,7 @@ If the network decomposes into multiple strongly connected components, each of t
 
 Secondly, you partition the network by using the output from the first
 
-- python partitionAnalysis.py -x < XMLFile > -i < inputPickleFile > -s < Species >
+**python partitionAnalysis.py -x < XMLFile > -i < inputPickleFile > -s < Species >**
 
 Again you have multiple options:
 
@@ -111,7 +111,7 @@ Again you have multiple options:
 
 To get familiar with the package, open test.py and modify the variables provided and call it via:
 
-python test.py
+**python test.py**
 
 You can add or modify the different parameters in test.py to see the specifics for your system.
 
