@@ -113,8 +113,99 @@ def findAllMRChordlessCyclesListSimpleDegree(F, reactions:set, metabolites:set, 
         c = components.pop()
         rx = reactions & c
         if rx:
-            v = max(rx, key = lambda v: G.degree[v])
-            #v = next(iter(rx))
+            Fc = F.subgraph(c)
+            v = max(rx, key = Fc.degree)
+            Bc = B.subgraph(c)
+            for S in stems(Fc, v):
+                if S[0]==S[2]:
+                    continue
+                Fcc = nx.algorithms.cycles._NeighborhoodCache(Fc)
+                Bcc = nx.algorithms.cycles._NeighborhoodCache(Bc)
+                yield from chordless_cycle_search_Species(Fcc, Bcc, S, bound, metabolites)
+            components.extend(c for c in nx.strongly_connected_components(F.subgraph(c - {v})) if len(c) > 3)
+#############################
+#############################
+
+
+def findAllMRChordlessCyclesListInDegree(F, reactions:set, metabolites:set, bound:int):
+    B = F.reverse(copy=True)
+    for u in metabolites:
+        Fu = F.successors(u)
+        digons = [[u, v] for v in Fu if F.has_edge(v, u)]
+        yield from digons
+        
+    def stems(C, v):
+        for u, w in product(C.pred[v], C.succ[v]):
+            yield [u, v, w]
+
+    components = [c for c in nx.strongly_connected_components(F) if len(c) > 3]
+    while components:
+        c = components.pop()
+        rx = reactions & c
+        if rx:            
+            Fc = F.subgraph(c)
+            v = max(rx, key = Fc.in_degree)
+            Bc = B.subgraph(c)
+            for S in stems(Fc, v):
+                if S[0]==S[2]:
+                    continue
+                Fcc = nx.algorithms.cycles._NeighborhoodCache(Fc)
+                Bcc = nx.algorithms.cycles._NeighborhoodCache(Bc)
+                yield from chordless_cycle_search_Species(Fcc, Bcc, S, bound, metabolites)
+            components.extend(c for c in nx.strongly_connected_components(F.subgraph(c - {v})) if len(c) > 3)
+#############################
+#############################
+
+
+def findAllMRChordlessCyclesListOutDegree(F, reactions:set, metabolites:set, bound:int):
+    B = F.reverse(copy=True)
+    for u in metabolites:
+        Fu = F.successors(u)
+        digons = [[u, v] for v in Fu if F.has_edge(v, u)]
+        yield from digons
+        
+    def stems(C, v):
+        for u, w in product(C.pred[v], C.succ[v]):
+            yield [u, v, w]
+
+    components = [c for c in nx.strongly_connected_components(F) if len(c) > 3]
+    while components:
+        c = components.pop()
+        rx = reactions & c
+        if rx:            
+            Fc = F.subgraph(c)
+            v = max(rx, key = Fc.out_degree)
+            Bc = B.subgraph(c)
+            for S in stems(Fc, v):
+                if S[0]==S[2]:
+                    continue
+                Fcc = nx.algorithms.cycles._NeighborhoodCache(Fc)
+                Bcc = nx.algorithms.cycles._NeighborhoodCache(Bc)
+                yield from chordless_cycle_search_Species(Fcc, Bcc, S, bound, metabolites)
+            components.extend(c for c in nx.strongly_connected_components(F.subgraph(c - {v})) if len(c) > 3)
+#############################
+#############################
+
+
+def findAllMRChordlessCyclesListReacInDegree(F, reactions:set, metabolites:set, bound:int):
+    B = F.reverse(copy=True)
+    R = createReactionNetwork(F, reactions)
+    for u in metabolites:
+        Fu = F.successors(u)
+        digons = [[u, v] for v in Fu if F.has_edge(v, u)]
+        yield from digons
+        
+    def stems(C, v):
+        for u, w in product(C.pred[v], C.succ[v]):
+            yield [u, v, w]
+
+    components = [c for c in nx.strongly_connected_components(F) if len(c) > 3]
+    while components:
+        c = components.pop()
+        rx = reactions & c
+        if rx:
+            Rc = R.subgraph(rx)
+            v = max(rx, key = Rc.in_degree)
             Fc = F.subgraph(c)
             Bc = B.subgraph(c)
             for S in stems(Fc, v):
@@ -346,7 +437,7 @@ def plotResultsLine(minNoNodes:int, maxNoNodes:int, p:float, path:str, timeDict:
     fig, ax = plt.subplots()
     fig.set_figheight(10)
     fig.set_figwidth(30)
-    barLabel=["tab:blue", "orange", "tab:green", "tab:red", "tab:cyan", "tab:purple", "tab:olive", "tab:pink"]
+    barLabel=["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:cyan", "tab:purple", "tab:olive", "tab:pink", "tab:brown", "tab:gray"]
     i = 0
     n=32
     for algo, sizeDict in timeDict.items():
@@ -376,7 +467,7 @@ def plotResultsLineEars(k:int, length:int, path:str, timeDict:dict):
     fig, ax = plt.subplots()
     fig.set_figheight(10)
     fig.set_figwidth(30)
-    barLabel=["tab:blue", "orange", "tab:green", "tab:red", "tab:cyan", "tab:purple", "tab:olive", "tab:pink"]
+    barLabel=["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:cyan", "tab:purple", "tab:olive", "tab:pink", "tab:brown", "tab:gray"]
     i = 0
     n=32
     for algo, sizeDict in timeDict.items():
@@ -488,7 +579,8 @@ def checkIfCountersMatch(setCounter, listCounter, listDegreeCounter, listROutDeg
 #############################
 
 
-def assignToTimeDict(timeDict:dict, setCounter:int, setTime:float, listTime:float, listDegreeTime:float, listROutDegreeTime:float, listRSymmDegreeTime:float, johnsonTime:float):
+def assignToTimeDict(timeDict:dict, setCounter:int, setTime:float, listTime:float, listDegreeTime:float, listInDegreeTime:float, listOutDegreeTime:float, listRInDegreeTime:float, listROutDegreeTime:float, listRSymmDegreeTime:float, johnsonTime:float):
+
     if "MR-chordlessSet" not in timeDict.keys():
         timeDict["MR-chordlessSet"]={}    
     if setCounter in timeDict["MR-chordlessSet"].keys():
@@ -509,6 +601,27 @@ def assignToTimeDict(timeDict:dict, setCounter:int, setTime:float, listTime:floa
         timeDict["MR-ChordlessListSimpleDegree"][setCounter].append(listDegreeTime)
     else:
         timeDict["MR-ChordlessListSimpleDegree"][setCounter]=[listDegreeTime]
+
+    if "MR-ChordlessListInDegree" not in timeDict:
+        timeDict["MR-ChordlessListInDegree"]={}
+    if setCounter in timeDict["MR-ChordlessListInDegree"].keys():
+        timeDict["MR-ChordlessListInDegree"][setCounter].append(listInDegreeTime)
+    else:
+        timeDict["MR-ChordlessListInDegree"][setCounter]=[listInDegreeTime]
+
+    if "MR-ChordlessListOutDegree" not in timeDict:
+        timeDict["MR-ChordlessListOutDegree"]={}
+    if setCounter in timeDict["MR-ChordlessListOutDegree"].keys():
+        timeDict["MR-ChordlessListOutDegree"][setCounter].append(listOutDegreeTime)
+    else:
+        timeDict["MR-ChordlessListOutDegree"][setCounter]=[listOutDegreeTime]
+
+    if "MR-ChordlessListRInDegreeTime" not in timeDict:
+        timeDict["MR-ChordlessListRInDegreeTime"]={}    
+    if setCounter in timeDict["MR-ChordlessListRInDegreeTime"].keys():
+        timeDict["MR-ChordlessListRInDegreeTime"][setCounter].append(listRInDegreeTime)
+    else:
+        timeDict["MR-ChordlessListRInDegreeTime"][setCounter]=[listRInDegreeTime]
 
     if "MR-ChordlessListROutDegreeTime" not in timeDict:
         timeDict["MR-ChordlessListROutDegreeTime"]={}    
@@ -734,28 +847,24 @@ if randomGraphs==True:
     bound=None
     timeDict = {}
     cycleDict = {}
-    overAllTimeDict = {}
+    sizeDict = {}
     myList = range(maxSize+1)
 
     # First: Likelihood
     maxP=7 
 
+    minNoNodes = int((a*1*l)+(b*1*l))
+    maxNoNodes = int((a*(len(myList)-1)*l)+(b*(len(myList)-1)*l))
     for k in tqdm(range(1, maxP+1), leave=False, total=maxP):
-        probabilityDict = {}
         p = k/200
         keys = set()
         # Second: Size
+        
         for i in tqdm(range(1,len(myList)), leave = False, total=len(myList)-1):
-            sizeDict = {}
-            
             # Determine sizes
             noMetabolites=int(a*i*l)
             noReactions=int(b*i*l)
             noVertices = noMetabolites + noReactions
-            if i ==1:
-                minNoNodes = noMetabolites+noReactions
-            elif i==len(myList)-1:
-                maxNoNodes = noMetabolites+noReactions
             
             if p<=0.015:
                 noGraphs = 100000
@@ -771,24 +880,47 @@ if randomGraphs==True:
                 R = set(G) - X
                 # assign labels
                 
+                # Set
                 timeStamp = time.time()
                 setCounter = 0
                 for c in findAllMRChordlessCyclesSet(G, R, X, bound):
                     setCounter += 1
                 setTime = time.time()-timeStamp
                 
+                # List
                 timeStamp = time.time()
                 listCounter = 0
                 for c in findAllMRChordlessCyclesList(G, R, X, bound):
                     listCounter += 1
                 listTime = time.time()-timeStamp
                 
-                # Simple - degree
+                # Simple degree
                 timeStamp = time.time()
                 listDegreeCounter = 0
                 for c in findAllMRChordlessCyclesListSimpleDegree(G, R, X, bound):
                     listDegreeCounter+=1
                 listDegreeTime = time.time()-timeStamp
+
+                # Simple in-degree
+                timeStamp = time.time()
+                listInDegreeCounter = 0
+                for c in findAllMRChordlessCyclesListInDegree(G, R, X, bound):
+                    listInDegreeCounter+=1
+                listInDegreeTime = time.time()-timeStamp
+
+                # Simple out-degree
+                timeStamp = time.time()
+                listOutDegreeCounter = 0
+                for c in findAllMRChordlessCyclesListOutDegree(G, R, X, bound):
+                    listOutDegreeCounter+=1
+                listOutDegreeTime = time.time()-timeStamp
+
+                # R-InDegree
+                timeStamp = time.time()
+                listRInDegreeCounter = 0
+                for c in findAllMRChordlessCyclesListReacInDegree(G, R, X, bound):
+                    listRInDegreeCounter += 1
+                listRInDegreeTime = time.time()-timeStamp
 
                 # R-OutDegree
                 timeStamp = time.time()
@@ -815,33 +947,33 @@ if randomGraphs==True:
                 
                 checkIfCountersMatch(setCounter, listCounter, listDegreeCounter, listROutDegreeCounter, listRSymmDegreeCounter, johnsonCounter)
 
-                assignToTimeDict(timeDict, setCounter, setTime, listTime, listDegreeTime, listROutDegreeTime, listRSymmDegreeTime, johnsonTime)
+                assignToTimeDict(timeDict, setCounter, setTime, listTime, listDegreeTime, listInDegreeTime, listOutDegreeTime, listRInDegreeTime, listROutDegreeTime, listRSymmDegreeTime, johnsonTime)
                 
                 # Assign values to other dictionaries
                 if setCounter not in sizeDict.keys():
-                    sizeDict[setCounter] = {"setTime": [setTime], "listTime": [listTime], "listDegreeTime": [listDegreeTime], "listROutDegreeTime": [listROutDegreeTime], "listRSymmDegreeTime":[listRSymmDegreeTime], "johnsonTime": [johnsonTime], "johnsonCounter": [johnsonCounter]}
+                    sizeDict[setCounter] = {"setTime": [setTime], "listTime": [listTime], "listDegreeTime": [listDegreeTime], "listInDegreeTime": [listInDegreeTime], "listOutDegreeTime": [listOutDegreeTime],"listRInDegreeTime": [listRInDegreeTime], "listROutDegreeTime": [listROutDegreeTime], "listRSymmDegreeTime":[listRSymmDegreeTime], "johnsonTime": [johnsonTime], "johnsonCounter": [johnsonCounter]}
                 else:
                     sizeDict[setCounter]["setTime"].append(setTime)
                     sizeDict[setCounter]["listTime"].append(listTime)
                     sizeDict[setCounter]["listDegreeTime"].append(listDegreeTime)
+                    sizeDict[setCounter]["listInDegreeTime"].append(listInDegreeTime)
+                    sizeDict[setCounter]["listOutDegreeTime"].append(listOutDegreeTime)                    
+                    sizeDict[setCounter]["listRInDegreeTime"].append(listRInDegreeTime)
                     sizeDict[setCounter]["listROutDegreeTime"].append(listROutDegreeTime)
                     sizeDict[setCounter]["listRSymmDegreeTime"].append(listRSymmDegreeTime)
                     sizeDict[setCounter]["johnsonTime"].append(johnsonTime)
                     sizeDict[setCounter]["johnsonCounter"].append(johnsonCounter)
                 keys.add(setCounter)
-                cycleDict[setCounter]=cycleDict.setdefault(setCounter, [])+ [totalJohnsonCounter]
-
-                probabilityDict[noVertices] = sizeDict
-                if p>0.02 and i>0:
+                cycleDict[setCounter]=cycleDict.setdefault(setCounter, [])+ [totalJohnsonCounter]              
+                if p>0.02:
                     path = direc+ "/Benchmarking" +str(p) + "min_" + str(minNoNodes) + "max_" +str(maxNoNodes) +".pkl"
                     plotResultsLine(minNoNodes, maxNoNodes, p, direc, timeDict)
                     with open(path, "wb") as file:
-                        pickle.dump((timeDict, cycleDict, overAllTimeDict), file)
-        overAllTimeDict[p]=probabilityDict
+                        pickle.dump((timeDict, cycleDict, sizeDict), file)
         path = direc+ "/Benchmarking" +str(p) + "min_" + str(minNoNodes) + "max_" +str(maxNoNodes) +".pkl"
         plotResultsLine(minNoNodes, maxNoNodes, p, direc, timeDict)
         with open(path, "wb") as file:
-            pickle.dump((timeDict, cycleDict, overAllTimeDict), file)
+            pickle.dump((timeDict, cycleDict, sizeDict), file)
 
 ###=====================================================================###
 ###                         Fluffles                                    ###
@@ -1020,6 +1152,21 @@ if ears==True:
                 listDegreeCounter = sum(1 for c in findAllMRChordlessCyclesListSimpleDegree(G, R, X, bound))
                 listDegreeTime = time.time()-timeStamp
 
+                # Simple in-degree
+                timeStamp = time.time()
+                listInDegreeCounter = sum(1 for c in findAllMRChordlessCyclesListInDegree(G, R, X, bound))
+                listInDegreeTime = time.time()-timeStamp
+                
+                # Simple in-degree
+                timeStamp = time.time()
+                listOutDegreeCounter = sum(1 for c in findAllMRChordlessCyclesListOutDegree(G, R, X, bound))
+                listOutDegreeTime = time.time()-timeStamp
+
+                # R-InDegree
+                timeStamp = time.time()
+                listRInDegreeCounter = sum(1 for c in findAllMRChordlessCyclesListReacInDegree(G, R, X, bound))
+                listRInDegreeTime = time.time()-timeStamp
+
                 # R-OutDegree
                 timeStamp = time.time()
                 listROutDegreeCounter = sum(1 for c in findAllMRChordlessCyclesListReacOutDegree(G, R, X, bound))
@@ -1029,7 +1176,6 @@ if ears==True:
                 timeStamp = time.time()
                 listRSymmDegreeCounter = sum(1 for c in findAllMRChordlessCyclesListReacSymmDegree(G, R, X, bound))
                 listRSymmDegreeTime = time.time()-timeStamp
-
 
                 # R-SimpleDegree            
                 timeStamp = time.time()
@@ -1052,7 +1198,7 @@ if ears==True:
                 
                 checkIfCountersMatch(setCounter, listCounter, listDegreeCounter, listROutDegreeCounter, listRSymmDegreeCounter, totalJohnsonCounter)
 
-                assignToTimeDict(timeDict, setCounter, setTime, listTime, listDegreeTime, listROutDegreeTime, listRSymmDegreeTime, johnsonTime)
+                assignToTimeDict(timeDict, setCounter, setTime, listTime, listDegreeTime, listInDegreeTime, listOutDegreeTime, listRInDegreeTime, listROutDegreeTime, listRSymmDegreeTime, johnsonTime)
 
                 if "JohnsonWOCheck" not in timeDict:
                     timeDict["JohnsonWOCheck"]={}
@@ -1063,12 +1209,15 @@ if ears==True:
 
                 # Assign values to other dictionaries
                 if setCounter not in sizeDict.keys():
-                    sizeDict[setCounter] = {"setTime": [setTime], "listTime": [listTime], "listDegreeTime": [listDegreeTime], "listROutDegreeTime": [listROutDegreeTime], "listRSymmDegreeTime":[listRSymmDegreeTime], "johnsonTime": [johnsonTime], "johnsonCounter": [totalJohnsonCounter],
+                    sizeDict[setCounter] = {"setTime": [setTime], "listTime": [listTime], "listDegreeTime": [listDegreeTime], "listInDegreeTime": [listInDegreeTime], "listOutDegreeTime": [listOutDegreeTime],"listRInDegreeTime": [listRInDegreeTime], "listROutDegreeTime": [listROutDegreeTime], "listRSymmDegreeTime":[listRSymmDegreeTime], "johnsonTime": [johnsonTime], "johnsonCounter": [totalJohnsonCounter],
                     "JohnsonWOCheckTime": [johnsonWOCheckTime], "JohnsonWOCheckCounter": [johnsonWOCheckCounter]}
                 else:
                     sizeDict[setCounter]["setTime"].append(setTime)
                     sizeDict[setCounter]["listTime"].append(listTime)
-                    sizeDict[setCounter]["listDegreeTime"].append(listDegreeTime)                    
+                    sizeDict[setCounter]["listDegreeTime"].append(listDegreeTime)
+                    sizeDict[setCounter]["listInDegreeTime"].append(listInDegreeTime)
+                    sizeDict[setCounter]["listOutDegreeTime"].append(listOutDegreeTime)
+                    sizeDict[setCounter]["listRInDegreeTime"].append(listRInDegreeTime)                    
                     sizeDict[setCounter]["listROutDegreeTime"].append(listROutDegreeTime)
                     sizeDict[setCounter]["listRSymmDegreeTime"].append(listRSymmDegreeTime)
                     sizeDict[setCounter]["johnsonTime"].append(johnsonTime)
