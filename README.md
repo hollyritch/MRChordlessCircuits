@@ -60,7 +60,7 @@ Prior to usage, setup a new conda environment with Python 3 (preferably 3.13 wor
 
 Clone the git, activate your conda environment, and first perform the following command:
 
-\textbf{python setup.py build_ext --inplace}
+**python setup.py build_ext --inplace**
 
 to compile checkMatch.pyx so that it can be imported as a normal in all partitionAnalysis.py
 
