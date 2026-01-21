@@ -1,6 +1,6 @@
 # 1. General
 
-This Github-Repository is divided into two parts. The first part is a python script that enumerates mrchordless circuits in randomly generated bipartite graphs. The second is autogatito, which is an 
+This Github-Repository is divided into two parts. The first part is a python script that enumerates MR-chordless circuits in randomly generated bipartite graphs. The second is autogatito, which is an 
 exension of autogato (https://github.com/hollyritch/autogato) and currently located here due to revision and publication purposes. During the review process reviewers should be able to focus only on autogatito 
 which is therefore separated from the main autogato repository. The moment autogatito is accepted for publication the extensions will be integrated into autogato as a new development branch and an updated
 version of autogato released. For now, autogatito is maintained here and contains the core implementation of autogato. 
