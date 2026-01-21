@@ -5,16 +5,32 @@ import time
 from tqdm import tqdm
 import concurrent.futures
 import sys
-# 1. Functions for computation of distance matrices and ILP solivng
 
 
 def computeExpectedShRed(ShReD:np.matrix):
+    '''
+    Translate ShRed to expected ShReD matrix
+
+    Upon invocation this function translates the previously computed ShReD matrix into an expected ShReD matrix 
+    as specified in "Identification of Biochemical Network Modules Based on Shortest Retroactive Distances, Sridharan et al., 2011, PLoS Computational Biology, 10.1371/journal.pcbi.1002262". In particular, an entry P[i,j] is the "arithmetic mean of the average of all non-zero and non-infinite ShReDs involving i and the average of all non-zero and non-infinite ShReDs involving j" (Sridharan et al.). For more details we refer to the original publication."
+
+    Parameters
+    ----------
+    
+    :param ShReD: numpy matrix with a distance measure between two reactions as specified in upper paper 
+    :type ShReD: np.matrix
+
+    Returns:
+    - np.matrix: P - expected ShReD matrix
+    '''
     P = np.zeros((np.shape(ShReD)[0], np.shape(ShReD)[1]))
     n = np.shape(P)[0]
     m = np.shape(P)[1]
+    
     # Vorverarbeitung
     Di = np.zeros((n,1))
-    Dj = np.zeros((m,1))    
+    Dj = np.zeros((m,1))
+    
     for i in tqdm(range(n), leave = False, desc="expectedShRed PreComputation 1/3"):
         sum_i = 0
         D_i=0
@@ -23,7 +39,7 @@ def computeExpectedShRed(ShReD:np.matrix):
                 D_i +=1
                 sum_i += ShReD[i][k]
         if D_i != 0:
-            Di[i][0] = sum_i/D_i
+            Di[i] = sum_i/D_i
 
     for j in tqdm(range(m), leave = False, desc="expectedShRed PreComputation 2/3"):
         sum_j = 0
@@ -33,8 +49,8 @@ def computeExpectedShRed(ShReD:np.matrix):
                 D_j +=1
                 sum_j += ShReD[j][k]
         if D_j!=0:
-            Dj[j][0] = sum_j/D_j
-    
+            Dj[j] = sum_j/D_j
+            
     for i in tqdm(range(n), leave = False, desc="expectedShRed PreComputation 3/3"):
         for j in range(m):
             if ShReD[i][j]==0:
@@ -42,14 +58,33 @@ def computeExpectedShRed(ShReD:np.matrix):
             if np.isinf(ShReD[i][j])==True:
                 P[i][j]=0
                 continue
-            P[i][j] = 1/2 * (Di[i][0] + Dj[j][0])
+            P[i][j] = 1/2 * (Di[i] + Dj[j])
     return P           
 #############################
 #############################
 
 
-def computShortestPath(nodeList:list, i:int):
-    global RN
+def computShortestPath(reactionNetwork:nx.DiGraph, nodeList:list, i:int):
+    '''
+    Compute the shortest directed paths for a vertex to all other vertices in the input reactionNetwork and save them in a list.
+    
+    Parameters
+    ----------
+
+    :param reactionNetwork: R-Graph of the input metabolic network
+    :type reactionNetwork: nx.DiGraph
+
+    :param nodeList: list of all nodes in 
+    :type nodeList: list of all reaction vertices in reactionNetwork
+
+    :param i: index of the currently to be processed vertex in the node-list
+    :type i: int
+
+    Returns:
+    - list : resultsList - list of distances between i and each vertex j
+    - i : current index
+    '''
+
     resultList = []
     n1 = nodeList[i]
     for j in range(len(nodeList)):
@@ -57,8 +92,8 @@ def computShortestPath(nodeList:list, i:int):
             continue
         else:
             n2 = nodeList[j]
-            if nx.has_path(RN,n1,n2)==True and nx.has_path(RN, n2,n1):
-                d = len(nx.shortest_path(RN,n1,n2))+len(nx.shortest_path(RN,n2,n1))-2
+            if nx.has_path(reactionNetwork,n1,n2)==True and nx.has_path(reactionNetwork, n2,n1):
+                d = len(nx.shortest_path(reactionNetwork,n1,n2))+len(nx.shortest_path(reactionNetwork,n2,n1))-2
                 resultList.append(d) 
             else:
                 resultList.append(np.inf)
@@ -67,10 +102,22 @@ def computShortestPath(nodeList:list, i:int):
 #############################
 
 
-def computeShortestPathMatrix(reactionNetwork:nx.DiGraph, noThreads:int):
-    global RN
+def computeShortestPathMatrix(reactionNetwork:nx.DiGraph):
+    '''
+    Generate a matrix which denotes the lenght of the shortest path between two vertices i, j in reactionNetwork
+
+    Parameters
+    ----------
+    
+    :param reactionNetwork: R-Graph of the input reaction Network
+    :type reactionNetwork: nx.DiGraph
+
+    Returns:
+    - np.Matrix : A - shortest path matrix
+    - list : nodes - sorted list of metabolites
+    '''
+
     nodes = sorted(list((reactionNetwork.nodes())))
-    RN = reactionNetwork
     n = len(nodes)
     A = np.zeros((n, n))
     if sys.platform.startswith("linux"):
@@ -79,7 +126,7 @@ def computeShortestPathMatrix(reactionNetwork:nx.DiGraph, noThreads:int):
         executor = concurrent.futures.ThreadPoolExecutor()
     else:
         executor = concurrent.futures.ProcessPoolExecutor()
-    futureSet = {executor.submit(computShortestPath, nodes, i) for i in range(n)}
+    futureSet = {executor.submit(computShortestPath, reactionNetwork, nodes,  i) for i in range(n)}
     for future in tqdm(concurrent.futures.as_completed(futureSet), total=len(futureSet), leave = False, desc="ShortestPathMatrix"):
         try:
             resultsList, k = future.result()
@@ -93,59 +140,20 @@ def computeShortestPathMatrix(reactionNetwork:nx.DiGraph, noThreads:int):
 #############################
 
 
-# def solveILP(G):
-#     with gp.Env(empty=True) as env:
-#         env.setParam('OutputFlag', 0)
-#         env.start()
-#         with gp.Model(env=env) as m:
-#             values = [-1,1]
-#             s = m.addVars(np.shape(G)[0], vtype=GRB.INTEGER, lb=-1, ub=1, name="s")
-#             Y = m.addVars(np.shape(G)[0], 2, vtype=GRB.BINARY, name = "Y")
-#             for i in range(np.shape(G)[0]):
-#                 m.addConstr(gp.quicksum(Y[i,j] for j in range(2)) == 1)
-#                 m.addConstr(s[i]==gp.quicksum(values[j] * Y[i,j] for j in range(2)))
-#             m.setObjective(gp.quicksum((G[i][j]*s[i]*s[j]) for j in range(np.shape(G)[0]) for i in range(np.shape(G)[1])), GRB.MAXIMIZE)
-#             #m.Params.PoolSearchMode = 2
-#             m.optimize()
-#             j=0
-#             v = np.zeros((1,np.shape(G)[0]))
-#             Q=m.getObjective().getValue()
-#             if m.SolCount > 1 and Q>0:
-#                 k = 0
-#                 while True:
-#                     m.setParam(GRB.Param.SolutionNumber, k)
-#                     for z in m.getVars():
-#                         if j>=np.shape(G)[0]:
-#                             break
-#                         v[0][j] = z.Xn
-#                         j+=1
-#                     oneVectorBool = True
-#                     for i in range(np.shape(v)[1]):
-#                         if v[0][i]!=1:
-#                             oneVectorBool = False
-#                             break
-#                     if oneVectorBool == False:
-#                         break
-#             else:
-#                 for z in m.getVars():
-#                     if j>=np.shape(G)[0]:
-#                         break
-#                     v[0][j] = z.Xn
-#                     j+=1
-#                 Q=m.getObjective().getValue()
-#     oneVectorBool = True
-#     for i in range(np.shape(v)[1]):
-#         if v[0][i] != 1:
-#             oneVectorBool = False
-#             break
-#     if oneVectorBool == True and Q>0:
-#         sys.exit("ERRRRORR!!!") 
-#     return v, Q
-# #############################
-# #############################
+def correctG(G:np.matrix):
+    '''
+    Change NAN and infinity entries in the matrix G to 0.
+    
+    Parameters
+    ----------
 
+    :param G: G = P - ShReD (so called ShReD-based modularity matrix, as described in "Identification of Biochemical Network Modules Based on Shortest Retroactive Distances, Sridharan et al., 2011, PLoS Computational Biology, 10.1371/journal.pcbi.1002262".)
+    :type G: np.matrix
 
-def correctG(G):
+    Return:
+    - np.Matrix - corrected G
+    '''
+
     for i in range(np.shape(G)[0]):
         for j in range(np.shape(G)[1]):
             if np.isnan(G[i][j]) or np.isinf(G[i][j]):
@@ -156,7 +164,24 @@ def correctG(G):
 
 
 # 2. Matrix operations
-def determinePositivAndNegativeSet(s, nodes:list):
+def determinePositivAndNegativeSet(s:np.matrix, nodes:list):
+    '''
+    Determine the set of of positive and non-positive entries in the given vector s
+    
+    Paramters
+    ---------
+
+    :param s: leading (largest eigenvector) of the corrected matrix G computed elsewhere
+    :type nodes: np.matrix
+
+    :param nodes: List of nodes from the R-Graph
+    :type nodes: list
+    
+    Returns:
+    - set : positive set - the set of indices that refer to positive entries in s
+    - set : negative set - the set of indices that refer to negative entries in s
+    '''
+
     posSet, negSet = set(), set()
     for j in range(np.shape(s)[1]):
         if np.real(s[0][j])>0:
@@ -171,7 +196,22 @@ def determinePositivAndNegativeSet(s, nodes:list):
 
 
 # 3. Functions for network partitioning
-def checkForCyclicity(posDG, negDG):
+def checkForCyclicity(posDG:nx.DiGraph, negDG:nx.DiGraph):
+    '''
+    Check if both in put graphs are acyclic
+
+    Parameters
+    ----------
+    
+    :param posDG: nx.DiGraph refering to the R-subgraph of the set of vertices with positive entries in the computed leading eigenvector 
+    :type posDG: nx.DiGraph
+
+    :param negDG: nx.DiGraph refering to the R-subgraph of the set of vertices with positive entries in the computed leading eigenvector 
+    :type negDG: nx.DiGraph
+
+    Returns:
+    - bool : cyclicity - False if both are acyclic, true otherwise
+    '''
     cyclicity=True
     if nx.is_directed_acyclic_graph(posDG) == True or nx.is_directed_acyclic_graph(negDG)==True:
         cyclicity = False
@@ -181,6 +221,20 @@ def checkForCyclicity(posDG, negDG):
 
 
 def computeLeadingEigenvector(G:np.matrix):
+    '''
+    Compute leading eigenvector of the input matrix G
+    
+    Parameters
+    ----------
+
+    :param G: ShReD-based modularity matrix (as described in "Identification of Biochemical Network Modules Based on Shortest Retroactive Distances, Sridharan et al., 2011, PLoS Computational Biology, 10.1371/journal.pcbi.1002262")
+    :type G: np.matrix
+
+    Returns:
+    - np.matrix : v - leading (largest) eigenvector 
+    - Q : float - Q = sum_{i^n} sum_{j^n} G[i,j]*s[i]*s[j]
+
+    '''
     eigenvalues, eigenvectors = np.linalg.eigh(G)
     transposeEigenvectors = np.transpose(eigenvectors)
     largestEigenvalue = round(eigenvalues[0], 5)
@@ -197,7 +251,6 @@ def computeLeadingEigenvector(G:np.matrix):
     s = np.zeros((1,len(largestEigenvector)))
     t = np.zeros((1,len(largestEigenvector)))
     sNeg = True
-    tNeg = True
     for i in range(np.shape(s)[1]):
         if round(largestEigenvector[i],5) <0:
             s[0][i] = -1
@@ -206,9 +259,7 @@ def computeLeadingEigenvector(G:np.matrix):
             s[0][i] = 1
             t[0][i] = 1
             sNeg = False
-            tNeg = False
         else:
-            tNeg = False
             s[0][i] = -1
             t[0][i] = 1
     t = np.negative(t)
@@ -235,9 +286,20 @@ def computeLeadingEigenvector(G:np.matrix):
 #############################
 
 
-def computePartitioning(reactionNetwork:nx.DiGraph, noThreads:int):
-    timeStamp = time.time()
-    ShReD, nodes = computeShortestPathMatrix(reactionNetwork=reactionNetwork, noThreads=noThreads)
+def computePartitioning(reactionNetwork:nx.DiGraph):
+    '''
+    Compute all relevant functions for the partitioning of the input R-Graph
+    
+    :param reactionNetwork: R-Graph 
+    :type reactionNetwork: nx.DiGraph
+
+    Returns:
+    - s : np.matrix - leading eigenvector of modularity based ShReD-Matrix G
+    - Q : float - Q = sum_{i^n} sum_{j^n} G[i,j]*s[i]*s[j]
+    - nodes : list of nodes from reactionNetwork
+    '''
+    
+    ShReD, nodes = computeShortestPathMatrix(reactionNetwork=reactionNetwork)
     P = computeExpectedShRed(ShReD)                                               # Compute ShReD score
     G = P - ShReD                                                                 # Compute modified ShReD
     G = correctG(G=G)                                                             # Correct infinity values
@@ -280,7 +342,7 @@ def partitionNetwork(uReactionNetwork:nx.Graph, reactionNetwork:nx.DiGraph, part
             leaves.add(uReactionNetwork)                                                         
     # 2. Start partitioning 
     else:
-        s, Q, nodes = computePartitioning(reactionNetwork, noThreads)                                           # Perform computations for partitioning
+        s, Q, nodes = computePartitioning(reactionNetwork)                                           # Perform computations for partitioning
         if Q<=0:                                                                                                    # Don't continue partitioning if Q is less equal zero
             leaves.add(uReactionNetwork)
         else:                                                                                                       # Continue partitioning
@@ -320,8 +382,3 @@ def continuePartitioning(s:np.matrix, nodes:set, undirectedReactionNetwork:nx.Gr
 #############################
 
 
-
-
-### Main
-
-global RN

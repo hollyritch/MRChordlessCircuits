@@ -7,7 +7,7 @@ from copy import deepcopy
 from tqdm import tqdm
 from copy import copy
 import numpy as np
-import concurrent.futures
+
 import sys, os
 import libsbml
 import time
@@ -23,6 +23,7 @@ import libsbml
 import networkx as nx
 from collections import defaultdict
 from itertools import product
+import concurrent.futures
 
 
 class _NeighborhoodCache(dict):
@@ -109,6 +110,22 @@ def chordless_cycle_search(F, B, path, length_bound, X):
 #############################
 
 
+def createReactionNetwork(G:nx.DiGraph, reactions:set):
+    reactionNetwork = nx.DiGraph()
+    for r1 in reactions:
+        for r2 in reactions:
+            if r1==r2:
+                continue
+            # First Check if a product of r1 is a reactant of r2
+            productsR1 = set(G.successors(r1))
+            eductsR2 = set(G.predecessors(r2))
+            if len(productsR1.intersection(eductsR2))>0:
+                reactionNetwork.add_edge(r1, r2)
+    return reactionNetwork
+#############################
+#############################
+
+
 def findAllMRChordlessCycles(F, R, X, bound):
     B = F.reverse(copy=True)
     for u in X:
@@ -135,6 +152,38 @@ def findAllMRChordlessCycles(F, R, X, bound):
                 Bcc = nx.algorithms.cycles._NeighborhoodCache(Bc)
                 yield from chordless_cycle_search(Fcc, Bcc, S, bound, X)
             components.extend(c for c in nx.strongly_connected_components(F.subgraph(comp - {v})) if len(c) > 3)
+#############################
+#############################
+
+
+def findAllMRChordlessCyclesListReacInDegree(F, reactions:set, metabolites:set, bound:int):
+    B = F.reverse(copy=True)
+    R = createReactionNetwork(F, reactions)
+    for u in metabolites:
+        Fu = F.successors(u)
+        digons = [[u, v] for v in Fu if F.has_edge(v, u)]
+        yield from digons
+        
+    def stems(C, v):
+        for u, w in product(C.pred[v], C.succ[v]):
+            yield [u, v, w]
+
+    components = [c for c in nx.strongly_connected_components(F) if len(c) > 3]
+    while components:
+        c = components.pop()
+        rx = reactions & c
+        if rx:
+            Rc = R.subgraph(rx)
+            v = max(rx, key = Rc.in_degree)
+            Fc = F.subgraph(c)
+            Bc = B.subgraph(c)
+            for S in stems(Fc, v):
+                if S[0]==S[2]:
+                    continue
+                Fcc = nx.algorithms.cycles._NeighborhoodCache(Fc)
+                Bcc = nx.algorithms.cycles._NeighborhoodCache(Bc)
+                yield from chordless_cycle_search(Fcc, Bcc, S, bound, metabolites)
+            components.extend(c for c in nx.strongly_connected_components(F.subgraph(c - {v})) if len(c) > 3)
 #############################
 #############################
 
@@ -254,7 +303,7 @@ def analysePartitionTree(parameters, partitionTree:nx.DiGraph, siblings:dict, le
         for N in partitionTree.nodes():
             if len(partitionTree.in_edges(N))==0:
                 subN, metabolites, reactions = generateSubnetwork(N, network)
-        MRChordlessCircuits = findAllMRChordlessCycles(subN, reactions, metabolites, bound)
+        MRChordlessCircuits = findAllMRChordlessCyclesListReacInDegree(subN, reactions, metabolites, bound)
         circuitCounter = processCircuitsSuperCore(circuits = MRChordlessCircuits, circuitCounter = 0)
         coreTime = time.time()-coreTimeStamp
         print("Time needed for cores", coreTime)
@@ -1508,7 +1557,7 @@ def analyzeElementaryCircuitsCore(c:list):
 
 
 def assembleCores(parameters:dict, Q:deque, E:dict, speedCores:set):
-    cutoff = parameters["cutoffLargerCycles"]
+    cutoff = parameters["cutoffLargerCycles"]        
     while Q:
         if len(speedCores)>1e4:
             maxVal = min(int(1e7), len(Q))
@@ -1581,7 +1630,7 @@ def assembleCores(parameters:dict, Q:deque, E:dict, speedCores:set):
 ############################# 
 
 
-def callAssembleCythonCores(equivClass:frozenset, equivClassValues:dict, cutoff:int):
+def callAssembleCythonCores(equivClass:frozenset, equivClassValues:dict, cutoff:int):        
     global elemE, M, circuitIdMrEdgeDict, bigS, mID, rID
     try:
         newEquivClasses, change = assembleCythonCores(equivClass, equivClassValues, elemE, M, circuitIdMrEdgeDict, cutoff, bigS, mID, rID)
@@ -1649,7 +1698,7 @@ def checkEquivalenceClassCore(c, eqClass, autocatalytic):
             mr[e[0]]=e[1]
             rm[e[1]]=e[0]
         circuitIdMrEdgeDict[i] = frozenEq                           # Remember for this particular elementary circuit, which     
-        E[frozenEq] = {"MR": mr, "RM": rm, "Predecessors": set(), "Leaf": True, "Autocatalytic": autocatalytic, "Metzler": True, "Visited": True, "Core": autocatalytic, "Size": 1}     # Add new equivalence class to E with corresponding dictionary for M-R and R-M relationship, a set for precursors, and four flags: autocatalytic, Metzler, leaf, visited
+        E[frozenEq] = {"MR": mr, "RM": rm, "Leaf": True, "Autocatalytic": autocatalytic, "Metzler": True, "Visited": True, "Core": autocatalytic, "Size": 1}     # Add new equivalence class to E with corresponding dictionary for M-R and R-M relationship, a set for precursors, and four flags: autocatalytic, Metzler, leaf, visited
         circuitIdDict[i] = c
         if autocatalytic == True:
             speedCores.add(frozenEq)
@@ -1686,9 +1735,9 @@ def getIntersectingEquivClassesCores(equivClass:set, E:dict):
     autocatalytic = equivClassValues["Autocatalytic"]
     for c in all_circuits:            
         cEqCl = circuitIdMrEdgeDict[c]
-        if cEqCl in equivClassValues["Predecessors"]:
+        if cEqCl in equivClassValues.get("Predecessors", set()):
             continue
-        elif equivClass in E[cEqCl]["Predecessors"]:
+        elif equivClass in E[cEqCl].get("Predecessors", set()):
             continue
         elif equivClass == cEqCl:
             continue
@@ -1790,10 +1839,6 @@ def checkEquivalenceClassSuperCore(c, eqClass, autocatalytic):
         return False
 #############################
 #############################  
-
-    return
-#############################
-#############################
 
 
 def processCircuitsSuperCore(circuits, circuitCounter:int):
@@ -1921,7 +1966,7 @@ def alternativeInclusionCheck(cores:set, realCores:set, coreList:list, threads:i
 
 
 def conventionalInclusionCheck(cores:set, realCores:set):
-    with concurrent.futures.ProcessPoolExecutor(max_workers=noThreads) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=noThreads*4) as executor:
         for f in tqdm(concurrent.futures.as_completed(executor.submit(checkCoreInclusion, c) for c in cores), total=len(cores)):
             try:
                 coreFlag, c = f.result()
@@ -1941,15 +1986,6 @@ def checkUniquenessOfCores(cores:set):
     global noCore
     print("Checking cores now for inclusion")
     if len(cores)>1e4:
-        # if len(cores)>5e4:
-        #     threads = 128
-        #     k = int(len(cores)/128)
-        #     coreL = list(cores)
-        #     coreList = list(list(coreL[i*k:(i+1)*k]) for i in range(threads-1))
-        #     coreL.append(list(coreL[(threads-1)*k:]))
-        #     realCores = deepcopy(cores)
-        #     alternativeInclusionCheck(cores, realCores, coreList, threads)
-        # else:
         realCores = conventionalInclusionCheck(cores, set())
     else:
         for c in cores:
@@ -2037,7 +2073,6 @@ circuitIdMrEdgeDict = {}                                                        
 speedCores = set()
 noCore = set()
 maxRAM = 0
-
 if not os.path.exists(cycleDataPath):
     os.makedirs(cycleDataPath)
 if not os.path.exists(cycleDataPath+species):
