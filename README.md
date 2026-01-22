@@ -48,7 +48,7 @@ Linux and Mac systems are now supported due to usage of ProcessPoolExecutor or T
 
 # 3.1. Installation and Setup
 
-Prior to usage, setup a new conda environment with Python 3 (preferably 3.13 work fine) and install the following packages:
+Prior to usage, setup a new conda environment with Python 3 (>=3.13) and install the following packages:
 
 - SymPy
 - NumPy
@@ -57,6 +57,7 @@ Prior to usage, setup a new conda environment with Python 3 (preferably 3.13 wor
 - libsbml
 - tqdm
 - Cython
+- (setuptools)
 
 Clone the git, activate your conda environment, and first perform the following command:
 
