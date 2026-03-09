@@ -1012,16 +1012,22 @@ def determineStability(T:np.matrix):
             lamda = sc.sparse.linalg.eigs(sM, k=1, which = "LR", return_eigenvectors = False)
             if round(np.real(lamda[0]), 5)>0:
                 unstable = True   
-        except sc.sparse.linalg.ArpackNoConvergence as e:
+        except:
+            try:
+                for lamda in np.linalg.eigvals(T):
+                    if round(np.real(lamda),5)>0:        
+                        unstable = True
+                        break    
+            except:
+                unstable = determineAutocatalycityNonMetzler(T)
+    else:
+        try:
             for lamda in np.linalg.eigvals(T):
                 if round(np.real(lamda),5)>0:        
                     unstable = True
-                    break    
-    else:
-        for lamda in np.linalg.eigvals(T):
-            if round(np.real(lamda),5)>0:        
-                unstable = True
-                break
+                    break
+        except:
+            unstable = determineAutocatalycityNonMetzler(T)
     del T
     return unstable
 #############################

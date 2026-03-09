@@ -227,6 +227,24 @@ def computeSubstochasticMatrixForSetOfMREdgesCython(S, dict mID, dict rID, froze
 #############################
 
 
+def determineAutocatalycityLP(S:np.matrix):
+    k = sp.shape(S)[0]
+    A = (-1)*S
+    b = np.zeros((k,1))    
+    c = np.ones((1,k))
+    bounds = []
+    for i in range(k):
+        bounds.append((1, None)) 
+        b[i][0]=-1
+    result = sc.optimize.linprog(c=c, A_ub=A, b_ub=b, bounds=bounds)
+    if result["success"]==True:
+        return True
+    else:
+        return False
+#############################
+#############################
+
+
 def determineStabilityCython(T:np.matrix):
     cdef int k = np.shape(T)[0]
     cdef bint unstable = False
@@ -246,11 +264,7 @@ def determineStabilityCython(T:np.matrix):
                         unstable = True
                         break
             except:
-                d = np.linalg.det(T)
-                if d == (-1)**(k-1):
-                    unstable = True
-
-
+                unstable = determineAutocatalycityLP(T)
     else:
         try:
             for lamda in np.linalg.eigvals(T):
@@ -258,9 +272,7 @@ def determineStabilityCython(T:np.matrix):
                     unstable = True
                     break
         except:
-            d = np.linalg.det(T)
-            if d == (-1)**(k-1):
-                unstable = True    
+            unstable = determineAutocatalycityLP(T)            
     del T
     return unstable
 #############################
