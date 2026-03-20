@@ -1164,7 +1164,7 @@ def getIntersectingCycles(cKey:int, cycleIDEdgeDict:int, edgeCycleDict:dict):
 
 
 def getEquivalenceClass(c:list):
-    """
+    """ getEquivalenceClass
     Classify elementary circuits into equivalence classes according their 
     vertices and edges.
 
@@ -1832,7 +1832,8 @@ def checkEquivalenceClassSuperCore(c, eqClass, autocatalytic):
                        "Autocatalytic": autocatalytic, 
                        "Metzler": True, 
                        "Visited": True, 
-                       "Core": autocatalytic}                       # Add new equivalence class to E with corresponding 
+                       "Core": autocatalytic,
+                       "Size": 1}                       # Add new equivalence class to E with corresponding 
                                                                     # dictionary for M-R and R-M relationship, a set for precursors, and four flags: autocatalytic, Metzler, leaf, visited
         circuitIdDict[i] = c
         if autocatalytic == True:
