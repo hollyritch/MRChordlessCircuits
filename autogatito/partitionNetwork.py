@@ -118,7 +118,6 @@ else:
 # 4. Build network
 metabolicNetwork, vertexIDs = partitionNetworkHelper.buildNetwork(model=model)
 inhibitors = {}      # not yet implemented
-                       
 # 4.1 Find/Determine/Define abundant molecules to inhibit to many crosslinkings between modules that are actually distant from each other
 unnecessaryMolecules = partitionNetworkHelper.getAbundantMolecules(smallMolecules, metabolicNetwork)
 usefulNetwork = deepcopy(metabolicNetwork)                              
@@ -132,7 +131,7 @@ parameters["unnecessaryMolecules"] = unnecessaryMolecules
 parameters["unnecessaryMoleculesIDs"] = unnecessaryMoleculesIDSet
 
 metabolicNetwork.remove_nodes_from(unnecessaryMoleculesIDSet)     # Network for constructing the submodules
-usefulNetwork.remove_nodes_from(unnecessaryMoleculesIDSet)        # Network that will be analyzed in the end for elementary circuits
+#usefulNetwork.remove_nodes_from(unnecessaryMoleculesIDSet)        # Network that will be analyzed in the end for elementary circuits
 
 # 5. Partitioning and Analysis 
 wCCList = list(nx.weakly_connected_components(metabolicNetwork))
@@ -141,21 +140,18 @@ parameters["metabolicNetwork"]=deepcopy(metabolicNetwork)
 parameters["usefulNetwork"]=usefulNetwork
 parameters["nodes"]=usefulNetwork.nodes()
 parameters["vertexIDs"] = vertexIDs
-for i in tqdm(range(len(wCCList)), desc="Weakly connected components"):
-    cSet = wCCList[i]
-    if len(cSet)>1:
+for i in tqdm(range(len(wCCList)), desc="Weakly connected components"):    
+    cSet = wCCList[i]    
+    if len(cSet)>1:        
         connectedComponent = nx.subgraph(metabolicNetwork, cSet).copy()
-        for scSet in nx.strongly_connected_components(connectedComponent):                      # Only analyze strongly connected components
+        for scSet in nx.strongly_connected_components(connectedComponent):                      # Only analyze strongly connected components            
             stronglyConnectedComponent = nx.subgraph(connectedComponent, scSet).copy()
-            X, Y = nx.bipartite.sets(stronglyConnectedComponent)
+            X, Y = nx.bipartite.sets(stronglyConnectedComponent)            
             if len(X)>0:
                 parameters["reactions"], parameters["metabolites"] = partitionNetworkHelper.getReactionsAndMetabolites(X,Y, metabolicNetwork)
-                print("Reactions:", len(parameters["reactions"]), "Metabolites:", len(parameters["metabolites"]))
                 reactionNetwork = partitionNetworkHelper.createReactionNetwork(stronglyConnectedComponent, parameters["reactions"], inhibitors)
-                if len(reactionNetwork)<cutOff:
-                    print("Exiting because reaction network is too small")
+                if len(reactionNetwork)<cutOff:                    
                     continue
-
                 # Define new variables that are necessary
                 if len(reactionNetwork)>100:
                     noThreads = maxThreads
@@ -166,12 +162,14 @@ for i in tqdm(range(len(wCCList)), desc="Weakly connected components"):
                 leaves = set()
                 uRN = reactionNetwork.to_undirected(reactionNetwork, as_view=False) 
                 partitionTree.add_node(uRN)                           # partition tree has only undirected graphs as nodes
-                s, Q, nodes = partitionComputations.computePartitioning(reactionNetwork)
-                if Q<=0:                                              # If Q == 0 or smaller don't partition
-                    leaves.add(uRN)
-                    continue
-                partitionComputations.continuePartitioning(s, nodes, uRN, partitionTree, cutOff, siblings, leaves, reactionNetwork, noThreads)
-
+                if len(uRN)>1:                                            
+                    s, Q, nodes = partitionComputations.computePartitioning(reactionNetwork)
+                    if Q<=0:                                              # If Q == 0 or smaller don't partition
+                        leaves.add(uRN)
+                    else:
+                        partitionComputations.continuePartitioning(s, nodes, uRN, partitionTree, cutOff, siblings, leaves, reactionNetwork, noThreads)
+                else:
+                    print(reactionNetwork)
                 partitionTreePath = "./PickleFiles/" + outputPickleFiles+ "/partitionTree"+str(treeCounter) + ".pkl"
                 if not os.path.exists("./PickleFiles"):
                     os.makedirs("./PickleFiles")
@@ -182,4 +180,4 @@ for i in tqdm(range(len(wCCList)), desc="Weakly connected components"):
                     pickle.dump((parameters, partitionTree, siblings, leaves, uRN, usefulNetwork), file)
                     treeCounter +=1
                     file.close()
-
+                

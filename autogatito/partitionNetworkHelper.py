@@ -11,6 +11,7 @@ import numpy as np
 
 
 def buildNetwork(model:libsbml.Model):
+
     '''
     Build the bipartite Digraph that represents the graph structure of the model
     
@@ -51,19 +52,32 @@ def buildNetwork(model:libsbml.Model):
             rNameFW = rName + "_fw"
         else:
             rNameFW = rName
-        educts = r.getListOfReactants()                             # get reactants
-        products = r.getListOfProducts()                            # get products
+        try:
+            educts = r.getListOfReactants()                             # get reactants
+        except:
+            educts = []
+        try:
+            products = r.getListOfProducts()                            # get products
+        except:
+            products=[]
+        try:
+            catalyst = r.getNotes().toXMLString().split("<p>")[1].split("Catalyst:")[1].split("</p>")[0].strip()
+        except:
+            catalyst = "" 
         reactionFWID = counter                                      # Assign id...which is just a counter
-        counter+=1
-        
+        counter+=1        
         vertexIDs[rNameFW] = reactionFWID                           # Add reaction name and id to dict, so that they can 
                                                                     #be identified later on
         # Add reaction node to the network
         metabolicNetwork.add_node(reactionFWID)
         metabolicNetwork.nodes[reactionFWID]["Name"]=rNameFW
+        metabolicNetwork.nodes[reactionFWID]["ReactionName"]=rFullName
         metabolicNetwork.nodes[reactionFWID]["Type"]="Reaction"
+        metabolicNetwork.nodes[reactionFWID]["Catalyst"]=catalyst
         for e in educts:                                            # Add educts
             eSpecies = e.getSpecies()
+            eSpeciesObject = model.getSpecies(eSpecies)
+            eName = eSpeciesObject.getName()
             eductStoichiometry = e.getStoichiometry()
             if eSpecies not in vertexIDs:
                 eSpeciesID = counter
@@ -72,6 +86,7 @@ def buildNetwork(model:libsbml.Model):
                 # Add educt node to network
                 metabolicNetwork.add_node(eSpeciesID)           
                 metabolicNetwork.nodes[eSpeciesID]["Name"] = eSpecies
+                metabolicNetwork.nodes[eSpeciesID]["SpeciesName"] = eName
                 metabolicNetwork.nodes[eSpeciesID]["Type"] = "Species"
             else:
                 eSpeciesID = vertexIDs[eSpecies]
@@ -81,6 +96,8 @@ def buildNetwork(model:libsbml.Model):
             metabolicNetwork.edges[eSpeciesID, reactionFWID]["Stoichiometry"]=eductStoichiometry
         for p in products:                                          # Add products
             pSpecies = p.getSpecies()
+            pSpeciesObject = model.getSpecies(pSpecies)
+            pName = pSpeciesObject.getName()
             productStoichiometry = p.getStoichiometry()
             if pSpecies not in vertexIDs:
                 pSpeciesID = counter
@@ -90,6 +107,7 @@ def buildNetwork(model:libsbml.Model):
                 # Add product to network
                 metabolicNetwork.add_node(pSpeciesID)
                 metabolicNetwork.nodes[pSpeciesID]["Name"] = pSpecies
+                metabolicNetwork.nodes[pSpeciesID]["SpeciesName"] = pName
                 metabolicNetwork.nodes[pSpeciesID]["Type"] = "Species"
             else:
                 pSpeciesID = vertexIDs[pSpecies]
@@ -107,7 +125,9 @@ def buildNetwork(model:libsbml.Model):
             # Add reaction node to network
             metabolicNetwork.add_node(reactionRevID)
             metabolicNetwork.nodes[reactionRevID]["Name"] = rNameRev
+            metabolicNetwork.nodes[reactionRevID]["ReactionName"] = rFullName
             metabolicNetwork.nodes[reactionRevID]["Type"] = "Reaction"
+            metabolicNetwork.nodes[reactionRevID]["Catalyst"]=catalyst
             for e in products:                                      # Now add edge edge (which are products for 
                                                                     # fw-reaction)
                 eSpecies = e.getSpecies()
@@ -162,6 +182,7 @@ def createReactionNetwork(sCC:nx.DiGraph, reactions:set, inhibitors:dict):
     reactions = sorted(list(reactions))
     for i in range(len(reactions)):
         r1 = reactions[i]
+        reactionNetwork.add_node(r1)
         for j in range(len(reactions)):
             if i==j:
                 continue

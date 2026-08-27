@@ -7,7 +7,6 @@ from copy import deepcopy
 from tqdm import tqdm
 from copy import copy
 import numpy as np
-
 import sys, os
 import libsbml
 import time
@@ -157,13 +156,17 @@ def findAllMRChordlessCycles(F, R, X, bound):
 
 
 def findAllMRChordlessCyclesListReacInDegree(F, reactions:set, metabolites:set, bound:int):
+    global parameters
     B = F.reverse(copy=True)
     R = createReactionNetwork(F, reactions)
     for u in metabolites:
         Fu = F.successors(u)
         digons = [[u, v] for v in Fu if F.has_edge(v, u)]
-        yield from digons
-        
+        for digon in digons:
+            mrEdgeSet = getEquivalenceClass(digon)
+            subS, metzler = computeSubstochasticMatrixForSetOfMREdges(parameters, mrEdgeSet)
+            autocatalytic = determineStability(subS)
+            yield (digon, subS, metzler, mrEdgeSet, autocatalytic)                    # yield the path        
     def stems(C, v):
         for u, w in product(C.pred[v], C.succ[v]):
             yield [u, v, w]
@@ -905,9 +908,13 @@ def computeSubstochasticMatrixForSetOfMREdges(parameters:dict, newEquivClass:set
             subS[i][j] = S[mIDRow, rIDCol]
             if i != j and subS[i][j]<0:
                 metzler = False
-            if i==j:
-                if subS[i][j]>=0:
-                    sys.exit("ERRRRRRORR, CS matrix is not a CS matrix")
+            # if i==j:
+            #     if k>1:
+            #         if subS[i][j]>0:
+            #             print(subS)
+            #             input()
+            #             sys.exit("ERRRRRRORR, CS matrix is not a CS matrix")
+
     return subS, metzler
 #############################
 #############################
@@ -1122,18 +1129,30 @@ def generateStoichiometricMatrix(parameters:dict, model:libsbml.Model):
                 r = "_".join(r.split("_")[0:-1])
             rObject = model.getReaction(r)
             if forward == True:
-                educts = rObject.getListOfReactants()
-                products = rObject.getListOfProducts()
+                try:
+                    educts = rObject.getListOfReactants()
+                except:
+                    educts = []
+                try:
+                    products = rObject.getListOfProducts()
+                except:
+                    products = []
             else:
-                educts = rObject.getListOfProducts()
-                products = rObject.getListOfReactants()
+                try:
+                    educts = rObject.getListOfProducts()
+                except:
+                    educts = []
+                try:
+                    products = rObject.getListOfReactants()
+                except:
+                    products = []
             '''TODO(Change this  to)'''
             for e in educts:
                 if metabolite == e.getSpecies():
-                    S[i][j] = - metabolicNetwork.edges[metaboliteID, reactionID]["Stoichiometry"]
+                    S[i][j] -= metabolicNetwork.edges[metaboliteID, reactionID]["Stoichiometry"]
             for p in products:
                 if metabolite == p.getSpecies():
-                    S[i][j] = metabolicNetwork.edges[reactionID, metaboliteID]["Stoichiometry"]
+                    S[i][j] += metabolicNetwork.edges[reactionID, metaboliteID]["Stoichiometry"]
     return S
 #############################
 #############################
@@ -1434,6 +1453,7 @@ def processCircuits(circuits, leaf:bool, left:bool, circuitCounter:int):
 def readArguments():
     inputBool = False
     xmlBool = False
+    graphMLBool = False
     circuitBool = False
     checkNonMetzler = True
     threadBool = False
@@ -1443,6 +1463,7 @@ def readArguments():
     parallelBool = False
     speciesBool = False
     cycleDataBool = False
+
     for k in range(len(sys.argv)):
         newArgument = sys.argv[k]
         if newArgument == "-x" or newArgument=="--xmlFile":
@@ -1567,43 +1588,50 @@ def assembleCores(parameters:dict, Q:deque, E:dict, speedCores:set):
     while Q:
         if len(speedCores)>1e4:
             maxVal = min(int(1e7), len(Q))
-            with concurrent.futures.ProcessPoolExecutor(max_workers=noThreads) as executor:
-                for f in tqdm(concurrent.futures.as_completed(executor.submit(callAssembleCythonCores, Q[i], E[Q[i]], cutoff) for i in range(maxVal)), total=maxVal, leave = False):
-                    Q.popleft()
-                    try:
-                        equivClass, newEquivClasses, change  = f.result()
-                        #Subset relationships
-                        for c, cValue in change:
-                            eValue = E[c]
-                            eValue["Predecessors"].update(cValue["Predecessors"])
-                            if "Core" in cValue:
-                                eValue["Core"] = cValue["Core"]
-                            if "Leaf" in cValue:
-                                eValue["Leaf"]= cValue["Leaf"]
-                        for newEquiv, newValues in newEquivClasses.items():
-                            newFrozen = frozenset(newEquiv)
-                            if newFrozen in E:
-                                eValue = E[newFrozen]
-                                eValue
-                                if newValues["Leaf"]==False:
-                                    eValue["Leaf"]==False
-                                if newValues["Core"]==False:
-                                    eValue["Core"]==False
-                                    speedCores.discard(newFrozen)
+            if sys.platform.startswith("linux"):
+                executor = concurrent.futures.ProcessPoolExecutor()
+            elif sys.platform == "darwin":
+                executor = concurrent.futures.ThreadPoolExecutor()
+            else:
+                executor = concurrent.futures.ProcessPoolExecutor()
+            #with concurrent.futures.ProcessPoolExecutor(max_workers=noThreads) as executor:
+            for f in tqdm(concurrent.futures.as_completed(executor.submit(callAssembleCythonCores, Q[i], E[Q[i]], cutoff) for i in range(maxVal)), total=maxVal, leave = False):
+                Q.popleft()
+                try:
+                    equivClass, newEquivClasses, change  = f.result()
+                    #Subset relationships
+                    for c, cValue in change:
+                        eValue = E[c]
+                        eValue["Predecessors"].update(cValue["Predecessors"])
+                        if "Core" in cValue:
+                            eValue["Core"] = cValue["Core"]
+                        if "Leaf" in cValue:
+                            eValue["Leaf"]= cValue["Leaf"]
+                    for newEquiv, newValues in newEquivClasses.items():
+                        newFrozen = frozenset(newEquiv)
+                        if newFrozen in E:
+                            eValue = E[newFrozen]
+                            eValue
+                            if newValues["Leaf"]==False:
+                                eValue["Leaf"]==False
+                            if newValues["Core"]==False:
+                                eValue["Core"]==False
+                                speedCores.discard(newFrozen)
+                        else:
+                            E[newFrozen]=newValues
+                            if newValues["Autocatalytic"]==False:
+                                if len(newEquiv)<cutoff:
+                                    Q.append(newFrozen)
                             else:
-                                E[newFrozen]=newValues
-                                if newValues["Autocatalytic"]==False:
-                                    if len(newEquiv)<cutoff:
-                                        Q.append(newFrozen)
-                                else:
-                                    speedCores.add(newFrozen)
-                        # New cores
-                        
-                    except Exception as exc:
-                        print('%r generated an exception: %s', exc)
-                        print(traceback.format_exc())
-                        traceback.print_stack()
-                        input()
+                                speedCores.add(newFrozen)
+                    # New cores
+                    
+                except Exception as exc:
+                    print('%r generated an exception: %s', exc)
+                    print(traceback.format_exc())
+                    traceback.print_stack()
+                    input()
+            executor.shutdown()
         else:
             equivClass = Q.popleft()
             intersecEquivClasses= getIntersectingEquivClassesCores(equivClass, E)
@@ -1973,15 +2001,21 @@ def alternativeInclusionCheck(cores:set, realCores:set, coreList:list, threads:i
 
 
 def conventionalInclusionCheck(cores:set, realCores:set):
-    with concurrent.futures.ProcessPoolExecutor(max_workers=noThreads*4) as executor:
-        for f in tqdm(concurrent.futures.as_completed(executor.submit(checkCoreInclusion, c) for c in cores), total=len(cores)):
-            try:
-                coreFlag, c = f.result()
-                if coreFlag == True:
-                    realCores.add(c)
-            except Exception as exc:
-                print('%r generated an exception: %s', exc)
-                print(traceback.format_exc())
+    #with concurrent.futures.ProcessPoolExecutor(max_workers=noThreads) as executor:
+    if sys.platform.startswith("linux"):
+        executor = concurrent.futures.ProcessPoolExecutor()
+    elif sys.platform == "darwin":
+        executor = concurrent.futures.ThreadPoolExecutor()
+    else:
+        executor = concurrent.futures.ProcessPoolExecutor()
+    for f in tqdm(concurrent.futures.as_completed(executor.submit(checkCoreInclusion, c) for c in cores), total=len(cores)):
+        try:
+            coreFlag, c = f.result()
+            if coreFlag == True:
+                realCores.add(c)
+        except Exception as exc:
+            print('%r generated an exception: %s', exc)
+            print(traceback.format_exc())
     return realCores
     #############################
 #############################
@@ -2047,13 +2081,12 @@ print("=========================================================================
 print("=====================================================================================================================")
 parameters["cutoffLargerCycles"] = cutoffLargerCycles 
 
-print("GIL enabled:", sys._is_gil_enabled())
+#print("GIL enabled:", sys._is_gil_enabled())
 
 print(inputPickleFile)
 print(parameters.keys())
 
 parameters["noThreads"] = noThreads
-
 parameters["mID"], parameters["rID"], parameters["iDM"], parameters["iDR"], parameters["mList"], parameters["rList"] = getIDDicts(parameters["metabolites"], parameters["reactions"])
 parameters["StoichiometricMatrix"] = generateStoichiometricMatrix(parameters, model)
 parameters["StoichiometricMatrixDict"] = writeDictionaryFromStoichiometricMatrix(parameters["StoichiometricMatrix"])
@@ -2082,22 +2115,17 @@ noCore = set()
 maxRAM = 0
 if not os.path.exists(cycleDataPath):
     os.makedirs(cycleDataPath)
-if not os.path.exists(cycleDataPath+species):
-    os.makedirs(cycleDataPath+species)
 
 treeCounter = int(inputPickleFile.split("partitionTree")[1].split(".pkl")[0])
 # writeStoichiometricMatrixOutput(parameters, allCircuitsPath+species +"/"+"stoichiometricMatrix"+str(treeCounter)+".txt")
-outputPickleFilePath = cycleDataPath + species + "/partitionTreeData" + str(treeCounter) + ".pkl"
-
-file = open(cycleDataPath + species +"/allCycles"+ str(treeCounter) +".txt", "w")
-file.close()
-analysePartitionTree(parameters, partitionTree, siblings, leaves, uRN, usefulNetwork, circuitBound, species, treeCounter, cycleDataPath)
+outputPickleFilePath = cycleDataPath + "/partitionTreeData" + str(treeCounter) + ".pkl"
+metabolicNetwork=parameters["metabolicNetwork"]
+analysePartitionTree(parameters, partitionTree, siblings, leaves, uRN, metabolicNetwork, circuitBound, species, treeCounter, cycleDataPath)
 parameters["cycleDict"] = cycleDict 
 parameters["cycleLengthDict"] = cycleLengthDict
 totalTime = time.time()-timeStamp
 parameters["TotalTime"] = totalTime
 parameters["MaxRAM"]=maxRAM/(1024**3)
-
 with open(outputPickleFilePath, "wb") as file:
     pickle.dump((parameters, partitionTree, siblings, leaves, uRN, usefulNetwork), file)
 

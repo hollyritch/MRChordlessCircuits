@@ -228,7 +228,7 @@ def computeSubstochasticMatrixForSetOfMREdgesCython(S, dict mID, dict rID, froze
 
 
 def determineAutocatalycityLP(S:np.matrix):
-    k = sp.shape(S)[0]
+    k = np.shape(S)[0]
     A = (-1)*S
     b = np.zeros((k,1))    
     c = np.ones((1,k))
