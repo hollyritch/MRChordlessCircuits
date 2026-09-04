@@ -223,7 +223,8 @@ def getAbundantMolecules(smallMoleculesSet:set, metabolicNetwork:nx.DiGraph):
         node = metabolicNetwork.nodes[n]["Name"]
         if node.startswith("M_"):
             if node.endswith("_e"):
-                unneccessaryMolecules.add(node)
+                if len(node.split("_"))>=3:
+                    unneccessaryMolecules.add(node)
             shortendNode = "_".join(node.split("_")[:-1])+"_"
             if shortendNode in smallMoleculesSet:
                 unneccessaryMolecules.add(node)
