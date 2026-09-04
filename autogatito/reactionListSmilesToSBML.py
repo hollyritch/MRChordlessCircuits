@@ -52,37 +52,36 @@ def addSpecies(model:libsbml.Model, G:nx.DiGraph):
 
 
 def addReactions(model:libsbml, G:nx.DiGraph):  
-    for n, nvalue in G.nodes.items():
-        if nvalue["Type"] == "Reaction":
-            reactionName = nvalue["Name"]
-            r = model.createReaction()
-            check(r,                                              'create reaction')
-            check(r.setId(n),                                     'set reaction id')
-            check(r.setName(reactionName),                        'set reaction id')
-            check(r.setReversible(False),                         'set reaction reversibility flag')
-            check(r.setFast(False),                               'set reaction "fast" attribute')
+  for n, nvalue in G.nodes.items():
+    if nvalue["Type"] == "Reaction":
+      reactionName = nvalue["Name"]
+      r = model.createReaction()
+      check(r,                                              'create reaction')
+      check(r.setId(n),                                     'set reaction id')
+      check(r.setName(reactionName),                        'set reaction id')
+      check(r.setReversible(False),                         'set reaction reversibility flag')
+      check(r.setFast(False),                               'set reaction "fast" attribute')
       
-            # Add Reactants
-            for inEdge in G.in_edges(n):
-                s = inEdge[0]
-                sName = G.nodes[s]["Name"]
-                speciesRef = r.createReactant()
-                check(speciesRef,                                                           'create reactant')
-                check(speciesRef.setSpecies(s),                                             'assign reactant species')
-                check(speciesRef.setConstant(True),                                         'set "constant" on species ref 1')
-                check(speciesRef.setStoichiometry(G.edges[inEdge]["Stoichiometry"]),        'set stoichiometry')
-            
-            # Add Products
-            for outEdge in G.out_edges(n):
-                s = outEdge[1]
-                sName = G.nodes[s]["Name"]
-                speciesRef = r.createProduct()
-                print(G.edges[outEdge]["Stoichiometry"])
-                check(speciesRef,                                                         'create product')
-                check(speciesRef.setSpecies(s),                                           'assign product species')
-                check(speciesRef.setConstant(True),                                       'set "constant" on species ref 2')
-                check(speciesRef.setStoichiometry(G.edges[outEdge]["Stoichiometry"]),     'set stoichiometry')
-            model.addReaction(r)
+      # Add Reactants
+      for inEdge in G.in_edges(n):
+        s = inEdge[0]
+        sName = G.nodes[s]["Name"]
+        speciesRef = r.createReactant()
+        check(speciesRef,                                                           'create reactant')
+        check(speciesRef.setSpecies(s),                                             'assign reactant species')
+        check(speciesRef.setConstant(True),                                         'set "constant" on species ref 1')
+        check(speciesRef.setStoichiometry(G.edges[inEdge]["Stoichiometry"]),        'set stoichiometry')
+      
+      # Add Products
+      for outEdge in G.out_edges(n):
+        s = outEdge[1]
+        sName = G.nodes[s]["Name"]
+        speciesRef = r.createProduct()
+        check(speciesRef,                                                         'create product')
+        check(speciesRef.setSpecies(s),                                           'assign product species')
+        check(speciesRef.setConstant(True),                                       'set "constant" on species ref 2')
+        check(speciesRef.setStoichiometry(G.edges[outEdge]["Stoichiometry"]),     'set stoichiometry')
+      model.addReaction(r)
 ####################
 ####################
 
@@ -98,78 +97,47 @@ with open(metabolitePath, "r") as file:
     while True:
         if line == "":
             break
-        id, formula = line.split(":")
+        id, formula = line.split(" ")
         newID = "M_" + id
         G.add_node(newID)
-        G.nodes[newID]["Formula"] = formula.strip()
+        G.nodes[newID]["Formula"] = formula
         G.nodes[newID]["Type"] = "Species"
         G.nodes[newID]["Name"] = newID
-        formulaSpeciesDict[formula.strip()]=newID
+        formulaSpeciesDict[formula]=newID
         line = file.readline().strip()
-
-print(formulaSpeciesDict)
-integerList = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
 with open(reactionPath, "r") as file:
     line = file.readline().strip()
     while True:
+        print(line)
         if line == "":
             break
         id, reactionSmile = line.split(":")                
         if "<=>" in reactionSmile:
           lhs, rhs = reactionSmile.split("<=>")
           reversible = True          
-        elif "=>" in reactionSmile:
+        else:
           lhs, rhs = reactionSmile.split("=>")
           reversible = False
-        else:
-            lhs, rhs = reactionSmile.split("->")
-            reversible = False
         newID = "R_" + id 
         G.add_node(newID)
         G.nodes[newID]["Reversible"] = reversible
-        reactants = lhs.split("+")
-        products = rhs.split("+")
-        for preReac in reactants:
-            reac = preReac.strip()
-            if reac[0] in integerList:
-                s=reac[0]
-                for i in range(1,len(reac)):
-                    if reac[i] in integerList:
-                        s+=reac[i]
-                    else:
-                        break
-                s = int(s)
-                reac = reac[i:]
-            else:
-                s=1
+        reactants = lhs.split("|")
+        products = rhs.split("|")
+        for reac in reactants:
             reacID = formulaSpeciesDict[reac]
             if (reacID, newID) in G.edges():
-                G.edges[(reacID, newID)]["Stoichiometry"] +=s
+                G.edges[(reacID, newID)]["Stoichiometry"] +=1
             else:
                 G.add_edge(reacID, newID)
-                G.edges[(reacID, newID)]["Stoichiometry"] =s
-        print(products)
-        for preProd in products:            
-            prod = preProd.strip()
-            if prod[0] in integerList:
-                s=prod[0]
-                for i in range(1,len(prod)):
-                    if prod[i] in integerList:
-                        s+=prod[i]
-                    else:
-                        break
-                s = int(s)
-                prod = prod[i:]
-            else:
-                s=1
+                G.edges[(reacID, newID)]["Stoichiometry"] =1
+        for prod in products:
             prodID = formulaSpeciesDict[prod]
             if (newID, prodID) in G.edges():
-                G.edges[(newID, prodID)]["Stoichiometry"] +=s
+                G.edges[(newID, prodID)]["Stoichiometry"] +=1
             else:
                 G.add_edge(newID, prodID)
-                G.edges[(newID, prodID)]["Stoichiometry"] =s
-            print(G.edges[(newID, prodID)])
+                G.edges[(newID, prodID)]["Stoichiometry"] =1        
         G.nodes[newID]["Type"] = "Reaction"
         G.nodes[newID]["Name"] = newID
         line = file.readline().strip()
